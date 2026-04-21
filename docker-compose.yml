@@ -1,0 +1,21 @@
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: db_riesgo_crediticio
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
+      POSTGRES_DB: ${POSTGRES_DB:-riesgo_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Este es el volumen nombrado que, si cambias tablas, deberás borrar con down -v
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:
+
