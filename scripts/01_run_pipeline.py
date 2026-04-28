@@ -8,7 +8,7 @@ def ejecutar_pipeline():
     
     # 1. Ejecutar descarga
     logging.info("Paso 1: Ejecutando carga_csv.py...")
-    resultado_descarga = subprocess.run(["python", "carga_csv.py"])
+    resultado_descarga = subprocess.run(["python", "01_carga_csv.py"])
     
     if resultado_descarga.returncode != 0:
         logging.error("Falló la descarga del CSV. Deteniendo el pipeline.")
@@ -16,7 +16,7 @@ def ejecutar_pipeline():
 
     # 2. Ejecutar carga a base de datos
     logging.info("Paso 2: Ejecutando load_data.py...")
-    resultado_carga = subprocess.run(["python", "load_data.py"])
+    resultado_carga = subprocess.run(["python", "01_load_data.py"])
     
     if resultado_carga.returncode != 0:
         logging.error("Falló la inyección a la base de datos.")

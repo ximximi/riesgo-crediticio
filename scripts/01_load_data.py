@@ -14,7 +14,6 @@ def cargar_base_datos():
     ruta_csv = '../data/riesgo_crediticio.csv'
     
     try:
-        # Usamos low_memory=False como indicaste en tus notas
         logging.info("Leyendo el archivo CSV...")
         df = pd.read_csv(ruta_csv, low_memory=False)
         
