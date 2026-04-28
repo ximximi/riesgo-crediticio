@@ -25,12 +25,12 @@ def cargar_base_datos():
         
         # Separamos las columnas para la tabla CLIENTE
         df_cliente = df[['id_cliente', 'person_age', 'person_gender', 'person_education', 
-                         'person_income', 'person_emp_exp', 'person_home_ownership', 
-                         'cb_person_cred_hist_length', 'credit_score', 'previous_loan_defaults_on_file']]
+                        'person_income', 'person_emp_exp', 'person_home_ownership', 
+                        'cb_person_cred_hist_length', 'credit_score', 'previous_loan_defaults_on_file']]
         
         # Separamos las columnas para la tabla PRESTAMO (incluyendo el id_cliente como Llave Foránea)
         df_prestamo = df[['id_cliente', 'loan_amnt', 'loan_intent', 'loan_int_rate', 
-                          'loan_percent_income', 'loan_status']]
+                        'loan_percent_income', 'loan_status']]
 
         # --- CONEXIÓN A POSTGRESQL ---
         # Armamos la URL de conexión con las variables de entorno
