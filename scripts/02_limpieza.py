@@ -208,7 +208,8 @@ def procesar_datos():
         
     # b. Variables Binarias
     if 'previous_loan_defaults_on_file' in df.columns:
-        df['previous_loan_defaults_on_file'] = df['previous_loan_defaults_on_file'].map({'Yes': 1, 'No': 0})
+        # Se utilizan minúsculas ('yes', 'no') porque en el paso 2.5(b) se estandarizó todo el texto
+        df['previous_loan_defaults_on_file'] = df['previous_loan_defaults_on_file'].map({'yes': 1, 'no': 0})
         
     # c. Variables Dummies (One-Hot Encoding)
     categoricas_a_transformar = ['person_education', 'person_home_ownership', 'loan_intent']
