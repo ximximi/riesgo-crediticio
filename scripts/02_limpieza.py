@@ -133,6 +133,71 @@ def procesar_datos():
     reporte_inicial = qc_inicial.quality_report()
     logging.info(f"Reporte Inicial: {reporte_inicial}")
     
+    # 2.5 Tratamiento de Inconsistencias y Limpieza
+    logging.info("Iniciando tratamiento profundo de inconsistencias...")
+    
+    # a. Gestión de Duplicados
+    # Utilizamos 'id_cliente' como identificador único. Si existe, borramos los clones.
+    if 'id_cliente' in df.columns:
+        df = df.drop_duplicates(subset=['id_cliente'])
+        logging.info("Duplicados eliminados exitosamente basándose en 'id_cliente'.")
+    else:
+        df = df.drop_duplicates()
+        
+    # b. Limpieza de Inconsistencias de Texto (Categóricas)
+    # Convertimos a minúsculas y quitamos espacios residuales para estandarizar categorías
+    cat_cols = df.select_dtypes(include=["object"]).columns
+    for col in cat_cols:
+        # Convertir a minúsculas y hacer strip
+        df[col] = df[col].astype(str).str.lower().str.strip()
+        # Restaurar los nulos reales que el astype(str) convirtió a la palabra 'nan' o 'none'
+        df[col] = df[col].replace('nan', np.nan).replace('none', np.nan)
+        
+    # c. Corrección de Valores Negativos
+    # Aplicamos valor absoluto asumiendo que los negativos (ej. en edad o ingresos) son errores de tipeo
+    num_cols = df.select_dtypes(include=["number"]).columns
+    for col in num_cols:
+        if col != 'id_cliente' and col != 'loan_status': # Excluir IDs y variable objetivo
+            df[col] = df[col].abs()
+            
+    # d. Eliminación Crítica de Columnas
+    # Si alguna variable supera el 50% de datos nulos, la eliminamos por completo
+    umbral_nulos = len(df) * 0.5
+    for col in list(df.columns):
+        if df[col].isnull().sum() > umbral_nulos:
+            df = df.drop(columns=[col])
+            logging.info(f"Columna '{col}' eliminada por superar el 50% de datos nulos.")
+            
+    # Actualizar listas de columnas tras posibles eliminaciones
+    num_cols = df.select_dtypes(include=["number"]).columns
+    cat_cols = df.select_dtypes(include=["object"]).columns
+
+    # e. Eliminación de filas si falta la Variable Objetivo (loan_status)
+    if 'loan_status' in df.columns:
+        df = df.dropna(subset=['loan_status'])
+        logging.info("Filas con 'loan_status' (variable objetivo) nulo fueron eliminadas.")
+
+    # f. Tratamiento de Atípicos (Winsorización) y g. Imputación Numérica (Media)
+    for col in num_cols:
+        if col != 'id_cliente' and col != 'loan_status':
+            # Recortamos los atípicos a los percentiles 1 y 99 para contener los valores extremos
+            p01 = df[col].quantile(0.01)
+            p99 = df[col].quantile(0.99)
+            df[col] = df[col].clip(lower=p01, upper=p99)
+            
+            # Como ya tratamos los atípicos, es seguro imputar los vacíos restantes con la media
+            if df[col].isnull().any():
+                media = df[col].mean()
+                df[col] = df[col].fillna(media)
+                
+    # h. Imputación de Vacíos Categóricos (Moda)
+    for col in cat_cols:
+        if df[col].isnull().any():
+            moda = df[col].mode()[0]
+            df[col] = df[col].fillna(moda)
+            
+    logging.info("Tratamiento de inconsistencias y limpieza de datos finalizado.")
+    
     # 3. Transformaciones (Solo Categóricas a Numéricas y Sesgos)
     logging.info("Iniciando transformación de variables...")
     
