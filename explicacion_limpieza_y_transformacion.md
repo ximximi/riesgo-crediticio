@@ -68,3 +68,45 @@ Esto se realiza mediante la instrucción técnica `df.to_csv()`. Durante esta ex
 
 ### Destino del archivo
 El resultado es el archivo **`riesgo_crediticio_limpio.csv`**, el cual queda guardado automáticamente en tu carpeta compartida `data/`. Este archivo es la versión final e impecable de tu universo de solicitantes de crédito, y servirá como el alimento principal para entrenar y evaluar el modelo predictivo.
+
+---
+
+## 4. Tratamiento Propuesto para Inconsistencias (Próximos Pasos)
+
+Dado que actualmente estamos en la etapa de ingesta de datos crudos, el sistema actúa como un **auditor** (detecta problemas y calcula un puntaje de calidad). Para automatizar la limpieza profunda, se deben implementar las siguientes reglas de tratamiento directamente en el script `02_limpieza.py`, basándonos en metodologías estandarizadas:
+
+### 1. Tratamiento de Datos Ausentes (Valores Faltantes o Nulos)
+El manejo de valores ausentes es un aspecto crucial en la preparación de datos. Existen diversas estrategias que aplicaremos dependiendo del contexto:
+
+*   **Variables Cuantitativas (Numéricas):**
+    *   **Uso de la Mediana:** Si la variable contiene valores atípicos (outliers) o datos asimétricos, imputaremos los datos faltantes con la mediana, ya que es menos sensible a los extremos.
+    *   **Uso de la Media:** Si la variable tiene una distribución normal y no presenta atípicos, sustituiremos con la media. *(Nota: Si los valores atípicos de esta columna son tratados previamente para acercar los extremos a la normalidad, sí es válido imputar luego con la media).*
+*   **Variables Cualitativas (Categóricas o Texto):**
+    *   **Uso de la Moda:** Se reemplazarán los valores ausentes con la categoría más frecuente (la moda).
+*   **Estrategias alternativas según el escenario:**
+    *   **Eliminación de Filas:** Si los datos faltantes se concentran en un número muy pequeño de filas dentro de un dataset grande, se pueden eliminar directamente esas filas para evitar los sesgos de la imputación.
+    *   **Eliminación de Variables:** Si una columna posee más del 50% de sus datos ausentes y aporta poco valor analítico, la acción correcta es eliminar la variable completa.
+    *   *(Nota: Se desaconseja totalmente rellenar los datos numéricos ausentes con ceros, ya que introduce un sesgo significativo).*
+
+### 2. Registros Duplicados
+*   **La acción:** Su eliminación está estrictamente condicionada.
+*   **Cómo funcionaría:** Solo se pueden eliminar los registros duplicados si existe una columna que funcione como "Identificador Único" (como un ID de transacción o ID de cliente). Si no contamos con una columna que identifique unívocamente la información, no podemos eliminarlos, ya que podríamos estar borrando datos de transacciones legítimamente iguales que pertenecen a eventos distintos.
+
+### 3. Valores Atípicos (Outliers)
+*   **La acción:** Tratamiento de acercamiento o "recorte" (Winsorización).
+*   **Cómo funcionaría:** En lugar de eliminarlos indiscriminadamente, el objetivo es alterar la columna haciendo que el cambio sea lo menos dramático posible. Se "acortan" (limitan) los valores extremos para acercarlos a la distribución general. Como mencionamos antes, una vez tratados, se habilita la posibilidad de usar la media para la imputación de vacíos.
+
+### 4. Valores Numéricos Negativos e Inconsistencias Categóricas
+*   **Valores negativos:** Edades o ingresos negativos no tienen sentido y deben ser corregidos (ej. usando valor absoluto) o transformados a valores nulos para ser imputados mediante las reglas de la Sección 1.
+*   **Inconsistencias de texto:** Estandarización automática convirtiendo todas las categorías a letras minúsculas y eliminando espacios adicionales (ej. transformar `"Medico "` y `"MEDICO"` en `"medico"`).
+
+### ¿Qué tendríamos que modificar en el código?
+
+Para transformar nuestro script actual en un motor de limpieza y tratamiento que cumpla con este diseño riguroso (asegurando la trazabilidad del proceso), añadiríamos bloques de código utilizando Pandas:
+
+*   **Para los vacíos (Numéricos):** Evaluaciones condicionales que usen `df['col'].fillna(df['col'].median())` o `df['col'].fillna(df['col'].mean())` según la presencia de atípicos.
+*   **Para los vacíos (Categóricos):** `df['col'].fillna(df['col'].mode()[0])`.
+*   **Para los vacíos críticos:** `df.dropna(subset=['col_clave'])` para eliminar filas, o `df.drop(columns=['col_inutil'])` si los vacíos superan el 50%.
+*   **Para los duplicados:** `df.drop_duplicates(subset=['id_cliente'])` (solo si poseemos dicha columna identificadora).
+
+Implementar estas decisiones de forma automatizada y bien documentada garantizará que el archivo final `riesgo_crediticio_limpio.csv` contenga datos de alta calidad para las etapas posteriores de análisis e inteligencia artificial.
