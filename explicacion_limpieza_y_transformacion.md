@@ -110,3 +110,42 @@ Para transformar nuestro script actual en un motor de limpieza y tratamiento que
 *   **Para los duplicados:** `df.drop_duplicates(subset=['id_cliente'])` (solo si poseemos dicha columna identificadora).
 
 Implementar estas decisiones de forma automatizada y bien documentada garantizará que el archivo final `riesgo_crediticio_limpio.csv` contenga datos de alta calidad para las etapas posteriores de análisis e inteligencia artificial.
+
+---
+
+## 5. Diccionario de Tratamiento por Variable
+
+Para ser rigurosos con el Análisis Exploratorio de Datos (AED) y mantener la trazabilidad de los procesos, a continuación se documenta de forma explícita cómo se tratará y transformará cada columna específica de nuestra base de datos:
+
+### Identificadores y Claves
+*   **`id_cliente`**: Funciona como identificador único (llave primaria).
+    *   **Tratamiento:** Se utilizará exclusivamente para detectar y **eliminar registros duplicados**. Si una fila carece de este valor crítico, será eliminada (no se imputa). No sufre transformaciones matemáticas.
+
+### Variables Cuantitativas (Numéricas)
+*(Incluye: `person_age`, `person_income`, `person_emp_length`, `cb_person_cred_hist_length`, `loan_amnt`, `loan_int_rate`, `loan_percent_income`)*.
+*   **Tratamiento de Inconsistencias:** 
+    1. Se aplica la función de "valor absoluto" para corregir inconsistencias de números negativos (ej. edad -25 pasa a 25).
+    2. Se someten a **Winsorización** (recorte a los percentiles 1 y 99) para mitigar el impacto de los valores atípicos (outliers) sin perder la información de la fila.
+    3. Una vez acotados los atípicos, cualquier celda vacía (nula) será **imputada utilizando la media** de la columna.
+*   **Transformación Posterior:** Ninguna. Conservan su naturaleza continua.
+
+### Variables Cualitativas (Categóricas o de Texto)
+*(Incluye: `person_education`, `person_home_ownership`, `loan_intent`)*.
+*   **Tratamiento de Inconsistencias:** 
+    1. Se estandariza todo el texto a minúsculas y se eliminan espacios residuales (`" RENT "` -> `"rent"`) para evitar categorías falsamente separadas.
+    2. Los valores nulos se **imputarán con la moda** (la categoría más frecuente).
+*   **Transformación Posterior:** Una vez limpias, se aplica la técnica **One-Hot Encoding**. Cada una de estas columnas desaparecerá para dar paso a múltiples columnas nuevas (ej. `person_education_Master`) rellenas exclusivamente con `1` o `0`.
+
+### Variables Categóricas Binarias
+*(Incluye: `previous_loan_defaults_on_file`)*.
+*   **Tratamiento de Inconsistencias:** Mismo tratamiento categórico inicial (imputación por la moda si falta).
+*   **Transformación Posterior:** En lugar de separarse en nuevas columnas, se mapea directamente a valores binarios matemáticos: `"Yes"` se transforma en `1` y `"No"` se transforma en `0`.
+
+### Variables Descartadas (Mitigación de Sesgos)
+*   **`person_gender`** (Género): 
+    *   **Acción y Justificación:** Es **eliminada por completo** del dataset. Esta decisión técnica se tomó desde la etapa de planificación para evitar que la red neuronal o el modelo de machine learning aprenda patrones discriminatorios basados en el género al evaluar el riesgo crediticio.
+
+### Variable Objetivo (Target)
+*   **`loan_status`** (Estado histórico del préstamo: `0` o `1`).
+    *   **Acción:** Es la etiqueta que nuestro modelo intentará predecir. 
+    *   **Tratamiento:** Si encontramos filas donde este valor sea nulo (es decir, no sabemos si el cliente pagó o no), **la fila será eliminada**. Nunca se debe imputar la variable objetivo, ya que esto corrompería el entrenamiento de la Inteligencia Artificial al enseñarle sobre ejemplos inventados.
