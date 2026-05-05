@@ -1,0 +1,7 @@
+pandas
+SQLAlchemy
+psycopg2-binary
+scikit-learn
+requests
+gdown
+python-dotenv

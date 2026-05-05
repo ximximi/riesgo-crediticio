@@ -1,0 +1,9 @@
+# Ignorar el archivo CSV pesado
+data/*.csv
+
+# Ignorar contraseñas y variables de entorno
+.env
+
+# Ignorar carpetas internas de Python
+__pycache__/
+.venv/
