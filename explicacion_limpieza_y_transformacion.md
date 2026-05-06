@@ -149,3 +149,55 @@ Para ser rigurosos con el Análisis Exploratorio de Datos (AED) y mantener la tr
 *   **`loan_status`** (Estado histórico del préstamo: `0` o `1`).
     *   **Acción:** Es la etiqueta que nuestro modelo intentará predecir. 
     *   **Tratamiento:** Si encontramos filas donde este valor sea nulo (es decir, no sabemos si el cliente pagó o no), **la fila será eliminada**. Nunca se debe imputar la variable objetivo, ya que esto corrompería el entrenamiento de la Inteligencia Artificial al enseñarle sobre ejemplos inventados.
+
+---
+
+## 6. Revisión de Ramas y Plan de Unificación (Merge)
+
+Al analizar el estado actual del repositorio en GitHub, observamos que existen dos líneas de desarrollo paralelas (`main` y `subir-proyecto`) que han avanzado de forma simultánea. A continuación, se presenta una comparativa de su contenido y el plan recomendado para fusionarlas.
+
+### Comparativa de Ramas
+
+**Rama `main` (Principal remota):**
+*   **Estado:** Ha avanzado con commits recientes enfocados en la limpieza estructural del repositorio ("Resolución de conflictos" e "Implementación limpieza de datos").
+*   **Cambios Clave:** 
+    *   Se **eliminaron scripts individuales y obsoletos** como `correlation_filter.py`, `feature_engineering.py` y `winsorizer.py` (lo cual es positivo, ya que indica una intención de centralizar el código).
+    *   Presenta modificaciones en archivos de base de datos (`db/init.sql`) y rutinas de carga de datos (`01_carga_csv.py`, `01_load_data.py`).
+
+**Rama `subir-proyecto` (Nuestra rama actual):**
+*   **Estado:** Contiene el desarrollo lógico, profundo y documentado sobre el tratamiento de datos.
+*   **Cambios Clave:**
+    *   **Creación de Documentación:** Se agregó este mismo archivo (`explicacion_limpieza_y_transformacion.md`) que fundamenta teóricamente las decisiones.
+    *   **Motor de Limpieza Avanzado:** Se realizaron modificaciones críticas y extensas en `scripts/02_limpieza.py`. Se programó el bloque automatizado para manejar nulos, eliminar duplicados (vía llave primaria), tratar valores atípicos (Winsorización que reemplaza al viejo `winsorizer.py` borrado en `main`) y estandarizar variables categóricas.
+
+### Plan Estratégico de Unificación (Merge Plan)
+
+Dado que ambas ramas modificaron el archivo `02_limpieza.py` con distintos enfoques, el sistema de Git arrojará un **conflicto de fusión (Merge Conflict)** inevitable al intentar unirlas. El plan para resolverlo correctamente es el siguiente:
+
+**Paso 1: Preparación y Descarga**
+Cambiar a la rama principal y descargar la última versión estructural desde la nube.
+```bash
+git checkout main
+git pull origin main
+```
+
+**Paso 2: Iniciar la Fusión**
+Traer todo el trabajo inteligente de nuestra rama hacia la rama principal.
+```bash
+git merge subir-proyecto
+```
+
+**Paso 3: Resolución Crítica de Conflictos (`02_limpieza.py`)**
+Git pausará la fusión y pedirá ayuda con `02_limpieza.py`. 
+*   **La Acción:** En tu editor de código, debes elegir la opción **"Aceptar los cambios entrantes" (Accept Incoming Changes)**, es decir, priorizar el código que escribimos en `subir-proyecto`.
+*   **Justificación:** El código de `subir-proyecto` ya incorpora las lógicas de Winsorización y Feature Engineering directamente dentro del pipeline principal, reemplazando con creces los scripts individuales que `main` eliminó.
+
+**Paso 4: Finalizar la Fusión (Commit & Push)**
+El archivo de documentación en el que estás leyendo esto se añadirá automáticamente sin conflictos. Solo queda confirmar la resolución y subir la versión definitiva.
+```bash
+git add scripts/02_limpieza.py
+git commit -m "Merge: Integra motor centralizado de limpieza y documentación teórica"
+git push origin main
+```
+
+Al finalizar este plan, la rama `main` quedará impecable: sin scripts basura flotando y con un único archivo `02_limpieza.py` ultravitaminado, documentado y listo para alimentar los modelos de Inteligencia Artificial.
