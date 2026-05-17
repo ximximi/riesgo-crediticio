@@ -1,155 +1,195 @@
 import pandas as pd
 import numpy as np
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import FunctionTransformer
-from correlation_filter import CorrelationFilter
-from winsorizer import Winsorizer
-from feature_engineering import FeatureEngineering
+from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Cargar credenciales del .env
+load_dotenv('../.env')
+
+# ==========================================
+# 1. CLASE DE AUDITORÍA 
+# ==========================================
+class QualityCheck:
+    def __init__(self, data: pd.DataFrame, exclude_inconsistencies: list = None):
+        self.data = data
+        #Si se excluyen columnas
+        self.exclude_inconsistencies = exclude_inconsistencies if exclude_inconsistencies else []
+    #Valores faltantes
+    def has_nulls(self) -> bool:
+        return self.data.isnull().values.any()
+    #Valores duplicados
+    def has_duplicates(self) -> bool:
+        if 'id_cliente' in self.data.columns:
+            return self.data.duplicated(subset=['id_cliente']).any()
+        return self.data.duplicated().any()
+    #Valores atípicos, se excluyen id_cliente y loan_status y se aplica IQR significa que se consideran outliers aquellos valores que están por debajo de Q1 - 1.5*IQR o por encima de Q3 + 1.5*IQR
+    def has_outliers(self) -> bool:
+        numeric_cols = self.data.select_dtypes(include=["number"])
+        for col in numeric_cols.columns:
+            if col not in ['id_cliente', 'loan_status']:
+                Q1 = numeric_cols[col].quantile(0.25)
+                Q3 = numeric_cols[col].quantile(0.75)
+                IQR = Q3 - Q1
+                lower = Q1 - 1.5 * IQR
+                upper = Q3 + 1.5 * IQR
+                if ((numeric_cols[col] < lower) | (numeric_cols[col] > upper)).any():
+                    return True
+        return False
+    #Inconsistencias numéricas
+    def has_negative_values(self) -> bool:
+        numeric_cols = self.data.select_dtypes(include=["number"])
+        numeric_cols = numeric_cols.drop(columns=self.exclude_inconsistencies, errors='ignore')
+        for col in numeric_cols.columns:
+            if (numeric_cols[col] < 0).any():
+                return True
+        return False
+    #Inconsistencias categóricas, minúsculas y espacios eliminados
+    def has_categorical_inconsistencies(self) -> bool:
+        cat_cols = self.data.select_dtypes(include=["object"])
+        for col in cat_cols.columns:
+            values = cat_cols[col].dropna().astype(str)
+            normalized = values.str.strip().str.lower()
+            if len(values.unique()) != len(normalized.unique()):
+                return True
+        return False
+    #inconsistencias generales, si hay valores negativos o inconsistencias categóricas
+    def has_inconsistencies(self) -> bool:
+        return self.has_negative_values() or self.has_categorical_inconsistencies()
+    #Quality check general, da un diccionario con los resultados de cada def y un score
+    def quality_report(self) -> dict:
+        return {
+            "nulos/faltantes": bool(self.has_nulls()),
+            "duplicados": bool(self.has_duplicates()),
+            "outliers": self.has_outliers(),
+            "inconsistencias": self.has_inconsistencies(),
+            "quality_score": self.quality_score_weighted()
+        }
+    #Score ponderado
+    def quality_score_weighted(self) -> float:
+        weights = {"nulos/faltantes": 0.3, "duplicados": 0.2, "outliers": 0.2, "inconsistencias": 0.3}
+        checks = {
+            "nulos/faltantes": self.has_nulls(),
+            "duplicados": self.has_duplicates(),
+            "outliers": self.has_outliers(),
+            "inconsistencias": self.has_inconsistencies()
+        }
+        penalty = sum(weights[key] for key in checks if checks[key])
+        return round((1 - penalty) * 100, 2)
 
 
-def tratar_duplicados(X, drop=True):
-    return X.drop_duplicates() if drop else X
+# ==========================================
+# 2. FUNCIONES DE LIMPIEZA
+# ==========================================
+def obtener_conexion_db():
+    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    return create_engine(db_url)
 
-# FASE 0: Carga de Datos
+def aplicar_limpieza_base(df):
+    logging.info("Aplicando limpieza de datos...")
+    df = df.copy()
 
-# Leemos el archivo crudo que descargó del script 01_carga_csv.py
-logging.info("Cargando datos crudos...")
-data = pd.read_csv('../data/riesgo_crediticio.csv')
+    # a. Duplicados
+    if 'id_cliente' in df.columns:
+        df = df.drop_duplicates(subset=['id_cliente'])
+        logging.info("Duplicados eliminados basados en 'id_cliente'.")
 
+    # b. Inconsistencias Numéricas (Absolutos)
+    num_cols = df.select_dtypes(include=["number"]).columns
+    for col in num_cols:
+        if col not in ['id_cliente', 'loan_status']:
+            df[col] = df[col].abs()
 
-# FASE 1: Selección y Enrutamiento
-logging.info("Iniciando Fase 1: Selección y Enrutamiento...")
+    # c. Inconsistencias Categóricas (Estandarización)
+    cat_cols = df.select_dtypes(include=["object"]).columns
+    for col in cat_cols:
+        df[col] = df[col].astype(str).str.lower().str.strip()
+        df[col] = df[col].replace({'nan': np.nan, 'none': np.nan})
 
-# Eliminar variables por sesgo 
-# Eliminamos el género por razones éticas y legales en riesgo crediticio
-if 'person_gender' in data.columns:
-    data = data.drop(columns=['person_gender'])
-    logging.info(" - Columna 'person_gender' eliminada por sesgo.")
+    # d. Imputación Defensiva (Mediana y Moda)
+    for col in num_cols:
+        if df[col].isnull().any():
+            df[col] = df[col].fillna(df[col].median())
+    for col in cat_cols:
+        if df[col].isnull().any():
+            df[col] = df[col].fillna(df[col].mode()[0])
 
-# Separar la Variable Objetivo (Target)
-target = "loan_status"
+    # e. Tratamiento de Atípicos (Winsorización)
+    for col in num_cols:
+        if col not in ['id_cliente', 'loan_status']:
+            p01 = df[col].quantile(0.01)
+            p99 = df[col].quantile(0.99)
+            df[col] = df[col].clip(lower=p01, upper=p99)
 
-# X = Todas las características (Variables independientes)
-X = data.drop(columns=[target], errors="ignore")
+    return df
 
-# y = Lo que queremos predecir (Variable dependiente)
-y = data[target]
+def aplicar_feature_eng(df):
+    logging.info("Aplicando Feature Engineering...")
+    df = df.copy()
 
-logging.info(f" - Variable objetivo separada: {target}")
+    # Eliminar variable para mitigar sesgo
+    if 'person_gender' in df.columns:
+        df = df.drop(columns=['person_gender'])
 
-# Se define qué columnas van a la cinta de matemáticas (numéricas)
-num_cols = [
-    'person_age', 
-    'person_income', 
-    'person_emp_exp', 
-    'loan_amnt', 
-    'loan_int_rate', 
-    'loan_percent_income', 
-    'cb_person_cred_hist_length', 
-    'credit_score', 
-    'porcentaje_vida_laboral' # Nueva variable obtenida de feature_engineering
+    # Corregir correlación alta (person_emp_exp vs person_age)
+    if 'person_emp_exp' in df.columns and 'person_age' in df.columns:
+        df['es_primer_empleo'] = np.where(df['person_emp_exp'] <= 1, 1, 0)
+        divisor = np.maximum(1, df["person_age"] - 18)
+        df["porcentaje_vida_laboral"] = df["person_emp_exp"] / divisor
 
-]
+    return df
 
-# Se define qué columnas van a la cinta de texto (categóricas)
-cat_cols = [
-    'person_education', 
-    'person_home_ownership', 
-    'loan_intent', 
-    'previous_loan_defaults_on_file'
-]
+def inyectar_tablas_limpias(df, engine):
+    logging.info("Inyectando 2 nuevas tablas limpias a PostgreSQL...")
+    
+    # 1. Tabla Cliente Limpio
+    cols_cliente = ['id_cliente', 'person_age', 'person_education', 'person_income', 
+                    'person_emp_exp', 'person_home_ownership', 'cb_person_cred_hist_length', 
+                    'credit_score', 'previous_loan_defaults_on_file', 
+                    'es_primer_empleo', 'porcentaje_vida_laboral']
+    df_cliente = df[[col for col in cols_cliente if col in df.columns]]
+    df_cliente.to_sql('cliente_limpio', engine, if_exists='replace', index=False)
 
-logging.info("Fase 1 completada con éxito. Datos listos para el Pipeline.")
-
-
-
-
-
-# FASE 2: Preprocesamiento Paralelo
-logging.info("\nIniciando Fase 2: Construyendo las cintas transportadoras...")
-
-# Cinta A: Para las variables numéricas
-pipeline_numerico = Pipeline([
-    ("winsorizer", Winsorizer()),                       # 1. Aplasta atípicos extremos
-    ("imputer", SimpleImputer(strategy="mean")),        # 2. Rellena vacíos con el promedio
-    ("scaler", StandardScaler())                        # 3. Estandariza la escala de los números
-])
-
-# Cinta B: Para las variables categóricas (texto)
-pipeline_categorico = Pipeline([
-    ("imputer", SimpleImputer(strategy="most_frequent")), # 1. Rellena vacíos con la moda
-    ("onehot", OneHotEncoder(handle_unknown="ignore"))    # 2. Convierte texto a números binarios
-])
-
-# Unimos ambas cintas en la máquina principal: ColumnTransformer
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("num", pipeline_numerico, num_cols), # Pasa las num_cols por la Cinta A
-        ("cat", pipeline_categorico, cat_cols) # Pasa las cat_cols por la Cinta B
-    ]
-)
-
-logging.info(" - Máquina preprocesadora construida con éxito.")
+    # 2. Tabla Prestamo Limpio
+    cols_prestamo = ['id_cliente', 'loan_amnt', 'loan_intent', 'loan_int_rate', 
+                    'loan_percent_income', 'loan_status']
+    df_prestamo = df[[col for col in cols_prestamo if col in df.columns]]
+    df_prestamo.to_sql('prestamo_limpio', engine, if_exists='replace', index=False)
 
 
-# FASE 4: Ensamblaje del Gran Pipeline
-logging.info("\nIniciando Fase 4: Ensamblaje y Transformación...")
-
-# Instanciamos nuestra clase de creación de variables
-fe = FeatureEngineering()
-
-
-# Construimos la cinta transportadora principal (Pipeline Maestro)
-pipeline_preparacion = Pipeline(steps=[
-    ("duplicados", FunctionTransformer(tratar_duplicados, kw_args={"drop": False})),
-    ("feature_engineering", fe),
-    ("preprocesador", preprocessor),
-    ("colinealidad", CorrelationFilter(threshold=0.9))
-])
-
-logging.info(" - Pipeline ensamblado. Encendiendo la fábrica de datos (esto puede tomar unos segundos)...")
-
-# fit: calcula los promedios, los límites y las modas.
-pipeline_preparacion.fit(X)
-
-# Obtenemos los nombres de las columnas que salen del preprocesador
-feature_names = pipeline_preparacion.named_steps["preprocesador"].get_feature_names_out()
-
-# Le pasamos esos nombres al filtro de correlación
-pipeline_preparacion.named_steps["colinealidad"].set_feature_names(feature_names)
-
-# transform: aplica todas las matemáticas y conversiones a los datos
-X_transformada = pipeline_preparacion.transform(X)
-
-# Rescatamos los nombres finales (después de que el filtro eliminó redundancias)
-cols_finales = pipeline_preparacion.named_steps["colinealidad"].get_feature_names_out()
-
-# Volvemos a armar el DataFrame de Pandas con los datos puros
-data_transformada = pd.DataFrame(X_transformada, columns=cols_finales)
-
-# Reconectamos la variable objetivo (loan_status) que habíamos guardado al principio
-data_transformada[target] = y.values
-
-
-
-# FASE 5: Exportación a PostgreSQL
-logging.info("\nIniciando Fase 5: Exportación...")
-# Reemplazamos espacios por guiones bajos en los nombres de las columnas
-data_transformada.columns = data_transformada.columns.str.replace(' ', '_')
-ruta_salida = '../data/riesgo_crediticio_limpio.csv'
-data_transformada.to_csv(ruta_salida, index=False)
-
-logging.info(f"¡ÉXITO TOTAL! Dataset limpio y estandarizado guardado en: {ruta_salida}")
-logging.info(f"Dimensiones de los datos finales: {data_transformada.shape}")
-
-
-
-
-
-
+# ==========================================
+# 3. ORQUESTADOR PRINCIPAL
+# ==========================================
+if __name__ == "__main__":
+    try:
+        motor = obtener_conexion_db()
+        
+        # 1. Extracción
+        query = """
+            SELECT c.*, p.loan_amnt, p.loan_intent, p.loan_int_rate, p.loan_percent_income, p.loan_status
+            FROM cliente c
+            JOIN prestamo p ON c.id_cliente = p.id_cliente
+        """
+        df_crudo = pd.read_sql(query, motor)
+        
+        # 2. Quality Check Inicial
+        qc_inicial = QualityCheck(df_crudo)
+        logging.info(f"Reporte Inicial (Crudo): {qc_inicial.quality_report()}")
+        
+        # 3. Procesamiento
+        df_limpio = aplicar_limpieza_base(df_crudo)
+        df_final = aplicar_feature_eng(df_limpio)
+        
+        # 4. Quality Check Final
+        qc_final = QualityCheck(df_final)
+        logging.info(f"Reporte Final (Limpio): {qc_final.quality_report()}")
+        
+        # 5. Carga a BD
+        inyectar_tablas_limpias(df_final, motor)
+        logging.info("--- LIMPIEZA FINALIZADA CON ÉXITO ---")
+        
+    except Exception as e:
+        logging.error(f"Fallo en la limpieza: {e}")
