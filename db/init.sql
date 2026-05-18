@@ -1,7 +1,5 @@
--- =======================================================
--- FASE 1: TABLAS CRUDAS (Datos originales con restricciones)
--- =======================================================
 
+-- FASE 1: TABLAS CRUDAS (Datos originales con restricciones)
 CREATE TABLE IF NOT EXISTS cliente (
     id_cliente SERIAL PRIMARY KEY,
     person_age INT NOT NULL CHECK (person_age >= 0),
@@ -30,14 +28,13 @@ CREATE TABLE IF NOT EXISTS prestamo (
         ON DELETE CASCADE
 );
 
--- =======================================================
+
 -- FASE 2: TABLAS LIMPIAS (Datos procesados y sin sesgos)
--- =======================================================
 
 CREATE TABLE IF NOT EXISTS cliente_limpio (
-    id_cliente INT PRIMARY KEY,  -- Ya no es SERIAL, recibe el ID exacto de la tabla original
+    id_cliente INT PRIMARY KEY,  -- No es SERIAL, recibe el ID exacto de la tabla original
     person_age INT,
-    -- person_gender ELIMINADO por ética y sesgo algorítmico
+    -- person_gender ELIMINADO 
     person_education VARCHAR(100),
     person_income INT,
     person_emp_exp INT,

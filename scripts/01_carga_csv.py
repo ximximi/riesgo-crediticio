@@ -14,7 +14,6 @@ def descargar_datos():
     file_id = '1zKA5NZ8kvpI65DAsIS5n3yZCsKCemiCm' 
     url = f'https://drive.google.com/uc?id={file_id}'
 
-    # LÓGICA IF/ELSE: Validar si el archivo ya existe
     if os.path.exists(ruta_destino):
         logging.info(f"El archivo ya existe en {ruta_destino}. Se omite la descarga.")
     else:

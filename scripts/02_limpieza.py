@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
 import logging
@@ -10,9 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Cargar credenciales del .env
 load_dotenv('../.env')
 
-# ==========================================
 # 1. CLASE DE AUDITORÍA 
-# ==========================================
 class QualityCheck:
     def __init__(self, data: pd.DataFrame, exclude_inconsistencies: list = None):
         self.data = data
@@ -81,9 +79,8 @@ class QualityCheck:
         return round((1 - penalty) * 100, 2)
 
 
-# ==========================================
+
 # 2. FUNCIONES DE LIMPIEZA
-# ==========================================
 def obtener_conexion_db():
     db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
     return create_engine(db_url)
@@ -139,30 +136,35 @@ def aplicar_feature_eng(df):
         df['es_primer_empleo'] = np.where(df['person_emp_exp'] <= 1, 1, 0)
         divisor = np.maximum(1, df["person_age"] - 18)
         df["porcentaje_vida_laboral"] = df["person_emp_exp"] / divisor
+        
+    #'yes' y 'no' a 1 y 0
+    if 'previous_loan_defaults_on_file' in df.columns:
+            df['previous_loan_defaults_on_file'] = df['previous_loan_defaults_on_file'].map({'yes': 1, 'no': 0})
 
     return df
 
 def inyectar_tablas_limpias(df, engine):
     logging.info("Inyectando 2 nuevas tablas limpias a PostgreSQL...")
     
-    # 1. Tabla Cliente Limpio
+    # 1. Vaciar las tablas respetando las llaves foráneas de tu init.sql
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE prestamo_limpio, cliente_limpio RESTART IDENTITY CASCADE;"))
+
+    # 2. Separar e inyectar en Tabla Cliente Limpio
     cols_cliente = ['id_cliente', 'person_age', 'person_education', 'person_income', 
                     'person_emp_exp', 'person_home_ownership', 'cb_person_cred_hist_length', 
                     'credit_score', 'previous_loan_defaults_on_file', 
                     'es_primer_empleo', 'porcentaje_vida_laboral']
     df_cliente = df[[col for col in cols_cliente if col in df.columns]]
-    df_cliente.to_sql('cliente_limpio', engine, if_exists='replace', index=False)
+    df_cliente.to_sql('cliente_limpio', engine, if_exists='append', index=False)
 
-    # 2. Tabla Prestamo Limpio
+    # 3. Separar e inyectar en Tabla Prestamo Limpio
     cols_prestamo = ['id_cliente', 'loan_amnt', 'loan_intent', 'loan_int_rate', 
                     'loan_percent_income', 'loan_status']
     df_prestamo = df[[col for col in cols_prestamo if col in df.columns]]
-    df_prestamo.to_sql('prestamo_limpio', engine, if_exists='replace', index=False)
+    df_prestamo.to_sql('prestamo_limpio', engine, if_exists='append', index=False)
 
-
-# ==========================================
 # 3. ORQUESTADOR PRINCIPAL
-# ==========================================
 if __name__ == "__main__":
     try:
         motor = obtener_conexion_db()
