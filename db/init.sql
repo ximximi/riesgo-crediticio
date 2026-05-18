@@ -1,4 +1,7 @@
--- 1. Primero creamos la tabla CLIENTE (no tiene llaves foráneas)
+-- =======================================================
+-- FASE 1: TABLAS CRUDAS (Datos originales con restricciones)
+-- =======================================================
+
 CREATE TABLE IF NOT EXISTS cliente (
     id_cliente SERIAL PRIMARY KEY,
     person_age INT NOT NULL CHECK (person_age >= 0),
@@ -12,7 +15,6 @@ CREATE TABLE IF NOT EXISTS cliente (
     previous_loan_defaults_on_file VARCHAR(10) NOT NULL CHECK (previous_loan_defaults_on_file IN ('Yes', 'No'))
 );
 
--- 2. Luego creamos la tabla PRESTAMO (depende de CLIENTE)
 CREATE TABLE IF NOT EXISTS prestamo (
     id_prestamo SERIAL PRIMARY KEY,
     id_cliente INT NOT NULL,
@@ -22,44 +24,44 @@ CREATE TABLE IF NOT EXISTS prestamo (
     loan_percent_income NUMERIC(3,2) NOT NULL CHECK (loan_percent_income >= 0 AND loan_percent_income <= 1),
     loan_status INT NOT NULL CHECK (loan_status IN (0, 1)),
     
-    -- Definición de la Llave Foránea (Relación "realiza")
     CONSTRAINT fk_cliente
         FOREIGN KEY (id_cliente) 
         REFERENCES cliente(id_cliente)
         ON DELETE CASCADE
 );
 
+-- =======================================================
+-- FASE 2: TABLAS LIMPIAS (Datos procesados y sin sesgos)
+-- =======================================================
 
---Datos limpios 
--- Borramos la tabla si ya existía
-DROP TABLE IF EXISTS riesgo_crediticio_limpio;
+CREATE TABLE IF NOT EXISTS cliente_limpio (
+    id_cliente INT PRIMARY KEY,  -- Ya no es SERIAL, recibe el ID exacto de la tabla original
+    person_age INT,
+    -- person_gender ELIMINADO por ética y sesgo algorítmico
+    person_education VARCHAR(100),
+    person_income INT,
+    person_emp_exp INT,
+    person_home_ownership VARCHAR(50),
+    cb_person_cred_hist_length INT,
+    credit_score INT,
+    previous_loan_defaults_on_file INT,  -- Limpio: ahora es 0 o 1
+    
+    -- Nuevas variables (Feature Engineering)
+    es_primer_empleo INT,
+    porcentaje_vida_laboral NUMERIC(5,2) 
+);
 
--- Creamos la tabla exacta para recibir tu matriz matemática
-CREATE TABLE riesgo_crediticio_limpio (
-    id_registro SERIAL PRIMARY KEY,
-    num__person_age FLOAT,
-    num__person_income FLOAT,
-    num__loan_amnt FLOAT,
-    num__loan_int_rate FLOAT,
-    num__loan_percent_income FLOAT,
-    num__cb_person_cred_hist_length FLOAT,
-    num__credit_score FLOAT,
-    num__porcentaje_vida_laboral FLOAT,
-    cat__person_education_Associate FLOAT,
-    cat__person_education_Bachelor FLOAT,
-    cat__person_education_Doctorate FLOAT,
-    cat__person_education_High_School FLOAT,
-    cat__person_education_Master FLOAT,
-    cat__person_home_ownership_MORTGAGE FLOAT,
-    cat__person_home_ownership_OTHER FLOAT,
-    cat__person_home_ownership_OWN FLOAT,
-    cat__person_home_ownership_RENT FLOAT,
-    cat__loan_intent_DEBTCONSOLIDATION FLOAT,
-    cat__loan_intent_EDUCATION FLOAT,
-    cat__loan_intent_HOMEIMPROVEMENT FLOAT,
-    cat__loan_intent_MEDICAL FLOAT,
-    cat__loan_intent_PERSONAL FLOAT,
-    cat__loan_intent_VENTURE FLOAT,
-    cat__previous_loan_defaults_on_file_No FLOAT,
-    loan_status INT
+CREATE TABLE IF NOT EXISTS prestamo_limpio (
+    id_prestamo SERIAL PRIMARY KEY,
+    id_cliente INT NOT NULL,
+    loan_amnt INT,
+    loan_intent VARCHAR(100),
+    loan_int_rate NUMERIC(6,2),
+    loan_percent_income NUMERIC(3,2),
+    loan_status INT,
+    
+    CONSTRAINT fk_cliente_limpio
+        FOREIGN KEY (id_cliente) 
+        REFERENCES cliente_limpio(id_cliente)
+        ON DELETE CASCADE
 );
