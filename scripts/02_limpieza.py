@@ -114,12 +114,17 @@ def aplicar_limpieza_base(df):
         if df[col].isnull().any():
             df[col] = df[col].fillna(df[col].mode()[0])
 
-    # e. Tratamiento de Atípicos (Winsorización)
+    # e. Tratamiento de Atípicos (Winsorización + Reglas de Negocio)
     for col in num_cols:
         if col not in ['id_cliente', 'loan_status']:
-            p01 = df[col].quantile(0.01)
-            p99 = df[col].quantile(0.99)
-            df[col] = df[col].clip(lower=p01, upper=p99)
+            if col == 'person_age':
+                # Regla de Negocio: Edad realista para solicitar un crédito
+                df[col] = df[col].clip(lower=18, upper=85)
+            else:
+                # Winsorización estadística (percentil 1% y 99%) para dinero, historial, etc.
+                p01 = df[col].quantile(0.01)
+                p99 = df[col].quantile(0.99)
+                df[col] = df[col].clip(lower=p01, upper=p99)
 
     return df
 
