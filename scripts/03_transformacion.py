@@ -39,13 +39,24 @@ def seleccion_de_variables(df):
     
     correlaciones = df[num_cols].corr()[target].abs() # abs() porque las negativas también sirven
     
-    #AQUÍ SE DEFINE EL UMBRAL DE CORRELACIÓN PARA ELIMINAR VARIABLES IRRELEVANTES
+    # AQUÍ SE DEFINE EL UMBRAL DE CORRELACIÓN PARA ELIMINAR VARIABLES IRRELEVANTES
     umbral = 0.05
-    vars_irrelevantes = correlaciones[correlaciones < umbral].index.tolist()
+    vars_baja_corr = correlaciones[correlaciones < umbral].index.tolist()
     
-    if vars_irrelevantes:
-        df = df.drop(columns=vars_irrelevantes)
-        logging.info(f"   -> Variables eliminadas por baja correlación (< {umbral}): {vars_irrelevantes}")
+    # --- LISTA BLANCA (REGLAS DE NEGOCIO) ---
+    # Protegemos el score crediticio y las variables que creamos en Feature Engineering
+    variables_protegidas = ['es_primer_empleo', 'porcentaje_vida_laboral', 'credit_score']
+    
+    # Separamos las que realmente vamos a borrar de las que vamos a salvar
+    vars_a_eliminar = [var for var in vars_baja_corr if var not in variables_protegidas]
+    vars_salvadas = [var for var in vars_baja_corr if var in variables_protegidas]
+    
+    if vars_a_eliminar:
+        df = df.drop(columns=vars_a_eliminar)
+        logging.info(f"   -> Variables eliminadas por baja correlación lineal (< {umbral}): {vars_a_eliminar}")
+        
+    if vars_salvadas:
+        logging.info(f"   -> Variables PROTEGIDAS por lógica de negocio (sobrevivieron al filtro): {vars_salvadas}")
 
     return df
 
