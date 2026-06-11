@@ -5,3 +5,6 @@ scikit-learn
 requests
 gdown
 python-dotenv
+joblib
+matplotlib
+seaborn
