@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 load_dotenv('../.env')
 
 def cargar_base_datos():
-    ruta_csv = '../data/riesgo_crediticio.csv'
+    ruta_csv = 'data/riesgo_crediticio.csv'
     
     try:
         logging.info("1. Leyendo el archivo CSV crudo (descargado de Drive)...")

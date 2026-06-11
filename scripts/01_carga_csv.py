@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def descargar_datos():
     # Ruta donde se guardará el archivo
-    ruta_destino = '../data/riesgo_crediticio.csv'
+    ruta_destino = 'data/riesgo_crediticio.csv'
 
     #Nuevo --> Aqui se crea automaticamente la carpeta data si no existe
     os.makedirs(os.path.dirname(ruta_destino), exist_ok=True)
