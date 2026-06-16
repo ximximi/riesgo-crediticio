@@ -238,6 +238,10 @@ if __name__ == "__main__":
         logging.info(f"REPORTE FINAL (LIMPIO): {qc_final.quality_report()}")
         
         inyectar_tablas_limpias(df_final, motor)
+
+        ruta_csv_limpio = '../data/datos_limpios.csv'
+        df_final.to_csv(ruta_csv_limpio, index=False)
+        logging.info(f" -> [OK] Dataset limpio exportado a {ruta_csv_limpio}")
         
     except Exception as e:
         logging.error(f"Fallo en la limpieza: {e}")
