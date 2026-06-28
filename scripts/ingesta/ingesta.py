@@ -1,5 +1,5 @@
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import time
 from dotenv import load_dotenv
 import logging
