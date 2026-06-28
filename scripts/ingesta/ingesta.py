@@ -1,12 +1,37 @@
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import time
-import os
 from dotenv import load_dotenv
 import logging
+import os
+import gdown
+import logging
+
+from scripts.common.database import get_db_engine
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 load_dotenv('../.env')
+
+def descargar_datos():
+    # Ruta donde se guardará el archivo
+    ruta_destino = 'data/riesgo_crediticio.csv'
+
+    #Nuevo --> Aqui se crea automaticamente la carpeta data si no existe
+    os.makedirs(os.path.dirname(ruta_destino), exist_ok=True)
+    
+    file_id = '1zKA5NZ8kvpI65DAsIS5n3yZCsKCemiCm' 
+    url = f'https://drive.google.com/uc?id={file_id}'
+
+    if os.path.exists(ruta_destino):
+        logging.info(f"El archivo ya existe en {ruta_destino}. Se omite la descarga.")
+    else:
+        logging.info("Iniciando descarga del archivo CSV desde Google Drive...")
+        # Descarga usando gdown
+        gdown.download(url, ruta_destino, quiet=False)
+        logging.info("¡Descarga completada con éxito!")
+
+if __name__ == "__main__":
+    descargar_datos()
 
 def cargar_base_datos():
     ruta_csv = 'data/riesgo_crediticio.csv'
@@ -17,16 +42,14 @@ def cargar_base_datos():
         df = pd.read_csv(ruta_csv, low_memory=False)
         df.columns = df.columns.str.lower()
         
-        # --- EL TRUCO DE LA LLAVE FORÁNEA ---
         # Si el CSV plano no trae id_cliente, se lo inventamos numerando las filas
         # Esto es vital para que las tablas Cliente y Préstamo se conecten
         if 'id_cliente' not in df.columns:
             df.insert(0, 'id_cliente', range(1, 1 + len(df)))
         
-        # --- CONEXIÓN A POSTGRESQL ---
-        db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-        engine = create_engine(db_url)
-        time.sleep(2) 
+        # URL hecha en common/database.py
+        engine = get_db_engine()
+        time.sleep(2)
         
         # Limpiamos las tablas crudas por si estamos corriendo el script por segunda vez
         with engine.begin() as conn:
