@@ -7,7 +7,7 @@ import os
 import gdown
 import logging
 
-from scripts.common.database import get_db_engine
+from common.database import get_db_engine
 
 
 def descargar_datos():
