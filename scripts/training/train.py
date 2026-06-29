@@ -1,176 +1,140 @@
-import pandas as pd
-import numpy as np
-from sqlalchemy import create_engine
+"""
+Módulo de Entrenamiento de Modelo ML (MLOps).
+Extrae datos limpios, selecciona características, construye un Pipeline 
+(Preprocesamiento + Random Forest), entrena y serializa el modelo final.
+"""
+import sys
 import os
-from dotenv import load_dotenv
+import logging
+import joblib
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
-import logging
+from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 
-import joblib # libreria para la serializacion del archivo pkl
+# --- 1. EL ARREGLO DEL RADAR DEBE IR AQUÍ ---
+DIRECTORIO_SCRIPTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(DIRECTORIO_SCRIPTS)
 
+from common.database import get_db_engine 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-load_dotenv('../.env')
+logger = logging.getLogger(__name__)
 
-def obtener_conexion_db():
-    db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-    return create_engine(db_url)
+# Rutas absolutas
+BASE_DIR = os.path.dirname(DIRECTORIO_SCRIPTS)
+RUTA_MODELS = os.path.join(BASE_DIR, 'models')
+RUTA_MODELO_FINAL = os.path.join(RUTA_MODELS, 'pipeline_random_forest.pkl')
 
-def extraer_datos_limpios(engine):
-    logging.info("1. Extrayendo las tablas limpias desde PostgreSQL...")
+QUERY_DATOS_LIMPIOS = """
+    SELECT c.*, p.loan_amnt, p.loan_intent, p.loan_int_rate, p.loan_percent_income, p.loan_status
+    FROM cliente_limpio c
+    JOIN prestamo_limpio p ON c.id_cliente = p.id_cliente
+"""
 
-    query = """
-        SELECT c.*, p.loan_amnt, p.loan_intent, p.loan_int_rate, p.loan_percent_income, p.loan_status
-        FROM cliente_limpio c
-        JOIN prestamo_limpio p ON c.id_cliente = p.id_cliente
-    """
-    return pd.read_sql(query, engine)
+# Reglas de negocio y variables protegidas
+VARIABLES_PROTEGIDAS = ['es_primer_empleo', 'porcentaje_vida_laboral', 'credit_score']
+UMBRAL_CORRELACION = 0.05
+TARGET = 'loan_status'
 
-def seleccion_de_variables(df):
-    logging.info("2. Realizando Selección de Variables (Feature Selection)...")
+def extraer_datos_limpios() -> pd.DataFrame:
+    """1. Extrae los datos limpios desde PostgreSQL."""
+    logger.info("1. Extrayendo las tablas limpias desde PostgreSQL...")
+    engine = get_db_engine()
+    df = pd.read_sql(QUERY_DATOS_LIMPIOS, engine)
+    logger.info(f" -> Extracción exitosa. Filas: {df.shape[0]:,}, Columnas: {df.shape[1]}")
+    return df
+
+def seleccion_de_variables(df: pd.DataFrame) -> pd.DataFrame:
+    """2. Feature Selection basada en correlación y lógica de negocio."""
+    logger.info("2. Realizando Selección de Variables (Feature Selection)...")
     df = df.copy()
-    
-    # a. Eliminar identificadores (evitar que el modelo aprenda IDs de memoria)
+
     if 'id_cliente' in df.columns:
         df = df.drop(columns=['id_cliente'])
+        logger.info(" -> Columna 'id_cliente' eliminada.")
 
-    # b. Filtro por Correlación (Variables Numéricas)
-    target = 'loan_status'
     num_cols = df.select_dtypes(include=["number"]).columns
-    
-    correlaciones = df[num_cols].corr()[target].abs() # abs() porque las negativas también sirven
-    
-    # AQUÍ SE DEFINE EL UMBRAL DE CORRELACIÓN PARA ELIMINAR VARIABLES IRRELEVANTES
-    umbral = 0.05
-    vars_baja_corr = correlaciones[correlaciones < umbral].index.tolist()
-    
-    # --- LISTA BLANCA (REGLAS DE NEGOCIO) ---
-    # Protegemos el score crediticio y las variables que creamos en Feature Engineering
-    variables_protegidas = ['es_primer_empleo', 'porcentaje_vida_laboral', 'credit_score']
-    
-    # Separamos las que realmente vamos a borrar de las que vamos a salvar
-    vars_a_eliminar = [var for var in vars_baja_corr if var not in variables_protegidas]
-    vars_salvadas = [var for var in vars_baja_corr if var in variables_protegidas]
-    
+    correlaciones = df[num_cols].corr()[TARGET].abs()
+
+    vars_baja_corr = correlaciones[correlaciones < UMBRAL_CORRELACION].index.tolist()
+    vars_a_eliminar = [v for v in vars_baja_corr if v not in VARIABLES_PROTEGIDAS]
+    vars_salvadas = [v for v in vars_baja_corr if v in VARIABLES_PROTEGIDAS]
+
     if vars_a_eliminar:
         df = df.drop(columns=vars_a_eliminar)
-        logging.info(f"   -> Variables eliminadas por baja correlación lineal (< {umbral}): {vars_a_eliminar}")
-        
+        logger.info(f" -> Variables eliminadas por baja correlación (< {UMBRAL_CORRELACION}): {vars_a_eliminar}")
     if vars_salvadas:
-        logging.info(f"   -> Variables PROTEGIDAS por lógica de negocio (sobrevivieron al filtro): {vars_salvadas}")
+        logger.info(f" -> Variables PROTEGIDAS por lógica de negocio: {vars_salvadas}")
 
     return df
 
-def transformar_y_dividir(df):
-    logging.info("3. Dividiendo datos (Train/Test) y aplicando Transformaciones...")
-    
-    target = 'loan_status'
-    X = df.drop(columns=[target])
-    y = df[target]
+def entrenar_pipeline(df: pd.DataFrame):
+    """3. Construye el Pipeline (Transformador + Clasificador) y lo entrena."""
+    logger.info("3. Configurando Pipeline y dividiendo datos...")
 
-    # a. División Estratificada (Train/Test Split)
-    # Aquí aplicamos el "stratify=y" de tus notas para proteger a la clase minoritaria
+    X = df.drop(columns=[TARGET])
+    y = df[TARGET]
+
+    # División 80/20 estratificada
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, random_state=42, stratify=y
     )
-    logging.info(f"   -> Datos divididos: 80% Entrenamiento ({len(X_train)}), 20% Pruebas ({len(X_test)})")
+    X_test.to_csv(os.path.join(BASE_DIR, 'data', 'X_test_crudo.csv'), index=False)
+    y_test.to_csv(os.path.join(BASE_DIR, 'data', 'y_test.csv'), index=False)
 
-    # b. Identificar qué columnas van a qué transformación
+    logger.info(f" -> Datos divididos: Train ({X_train.shape[0]:,} filas), Test ({X_test.shape[0]:,} filas)")
+
     num_cols = X_train.select_dtypes(include=["number"]).columns.tolist()
     cat_cols = X_train.select_dtypes(include=["object"]).columns.tolist()
 
-    # c. Construir el motor de transformación (ColumnTransformer)
-    preprocesador = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), num_cols),
-            ("cat", OneHotEncoder(drop='first', handle_unknown='ignore'), cat_cols)
-        ]
-    )
+    # Bloque A: El Transformador de Columnas
+    preprocesador = ColumnTransformer(transformers=[
+        ("num", StandardScaler(), num_cols),
+        ("cat", OneHotEncoder(drop='first', handle_unknown='ignore'), cat_cols)
+    ])
 
-    # d. Entrenar el transformador SOLO con los datos de entrenamiento (Evita Data Leakage)
-    logging.info("   -> Aplicando StandardScaler a numéricas y OneHotEncoder a categóricas...")
-    X_train_transformado = preprocesador.fit_transform(X_train)
-    
-    # e. Transformar los datos de prueba usando las reglas aprendidas del entrenamiento
-    X_test_transformado = preprocesador.transform(X_test)
-
-    # Convertir de vuelta a DataFrames para exportar fácilmente
-    nombres_num = num_cols
-    # Obtener los nombres de las nuevas columnas binarias generadas por el OneHotEncoder
-    nombres_cat = preprocesador.named_transformers_["cat"].get_feature_names_out(cat_cols)
-    nombres_finales = list(nombres_num) + list(nombres_cat)
-
-    df_X_train = pd.DataFrame(X_train_transformado, columns=nombres_finales)
-    df_X_test = pd.DataFrame(X_test_transformado, columns=nombres_finales)
-
-    return df_X_train, df_X_test, y_train, y_test
-
-def exportar_datos_modelo(X_train, X_test, y_train, y_test):
-    logging.info("4. Exportando matrices finales para el modelo...")
-    ruta_base = '../results/'
-    
-    X_train.to_csv(os.path.join(ruta_base, 'X_train.csv'), index=False)
-    X_test.to_csv(os.path.join(ruta_base, 'X_test.csv'), index=False)
-    y_train.to_csv(os.path.join(ruta_base, 'y_train.csv'), index=False)
-    y_test.to_csv(os.path.join(ruta_base, 'y_test.csv'), index=False)
-    
-    logging.info("¡Archivos generados exitosamente en la carpeta /results!")
-
-if __name__ == "__main__":
-    try:
-        motor = obtener_conexion_db()
-        df_limpio = extraer_datos_limpios(motor)
-        df_seleccionado = seleccion_de_variables(df_limpio)
-        X_train, X_test, y_train, y_test = transformar_y_dividir(df_seleccionado)
-        exportar_datos_modelo(X_train, X_test, y_train, y_test)
-        logging.info("--- TRANSFORMACIÓN FINALIZADA CON ÉXITO ---")
-    except Exception as e:
-        logging.error(f"Fallo en la transformación: {e}")
-
-def entrenar_modelo():
-# PASO 1: se cargan los datos que ya fueron limpiados y divididos de la fase anterior
-    print("\n--- INICIANDO ENTRENAMIENTO DEL MODELO ---")
-    print("1. Cargando datos de entrenamiento...")
-
-    # X_train contiene las características (ingresos, edad, etc.)
-    ruta_x_train = '../results/X_train.csv'
-    # y_train contiene la respuesta (si fue fraude/moroso o no)
-    ruta_y_train = '../results/y_train.csv'
-    
-    
-    X_train = pd.read_csv(ruta_x_train)
-
-    # y_train usualmente se lee como un DataFrame, pero el modelo lo prefiere como una Serie (una sola columna),
-    # por eso usamos .squeeze() para aplanarlo.
-    y_train = pd.read_csv(ruta_y_train).squeeze() 
-
-# PASO 2: Configurar el cerebro de la IA (Random Forest)
-    # n_estimators=200: Le decimos que cree 200 árboles de decisión distintos.
-    # class_weight='balanced': IMPORTANTE!, Como hay muy pocos fraudes/morosos (desbalance), 
-    # esto le avisa al modelo que preste más atención a la clase minoritaria para que no la ignore.
-    # random_state=42: Asegura que si ejecutas esto mil veces, los árboles se generen siempre igual.
-    print("2. Configurando el algoritmo Random Forest (200 árboles, balanceado)...")
-    modelo_rf = RandomForestClassifier(
+    # Bloque B: El Clasificador
+    clasificador = RandomForestClassifier(
         n_estimators=200, 
         class_weight='balanced', 
         random_state=42
     )
-    # PASO 3: El Entrenamiento real
-    # La función .fit() es la importante donde, el modelo analiza X_train e intenta descubrir 
-    # las reglas ocultas o patrones que llevan a los resultados en y_train.
-    print("3. Entrenando el modelo (esto puede tomar unos segundos)...")
-    modelo_rf.fit(X_train, y_train)
-    # PASO 4: Serialización (Guardar el modelo)
-    # Usamos joblib.dump para tomar el modelo matemático que está en la memoria RAM 
-    # y guardarlo físicamente como un archivo .pkl en tu disco duro.
-    print("4. Serializando y guardando el modelo entrenado...")
-    ruta_modelo = '../models/modelo_random_forest.pkl'
-    joblib.dump(modelo_rf, ruta_modelo)
-    
-    print(f"--- ÉXITO: Modelo guardado en {ruta_modelo} ---")
-# Esta línea asegura que la función solo corra si ejecutamos este script directamente
+
+    # Bloque C: LA FUSIÓN (El Pipeline Final)
+    pipeline = Pipeline([
+        ('preprocesador', preprocesador),
+        ('modelo', clasificador)
+    ])
+
+    logger.info("4. Entrenando el Pipeline completo (esto puede tomar unos segundos)...")
+    # Al hacer fit al pipeline, limpia y entrena internamente
+    pipeline.fit(X_train, y_train)
+    logger.info(" -> Entrenamiento completado.")
+
+    return pipeline
+
+def guardar_modelo(pipeline):
+    """4. Serializa el pipeline completo en el disco."""
+    logger.info("5. Exportando el modelo entrenado...")
+    os.makedirs(RUTA_MODELS, exist_ok=True)
+    joblib.dump(pipeline, RUTA_MODELO_FINAL)
+    logger.info(f"¡Modelo guardado exitosamente en {RUTA_MODELO_FINAL}!")
+
+def ejecutar_entrenamiento() -> None:
+    """Punto de entrada principal del módulo de entrenamiento."""
+    logger.info("=== INICIANDO ENTRENAMIENTO MLOps ===")
+    try:
+        df = extraer_datos_limpios()
+        df = seleccion_de_variables(df)
+        pipeline_entrenado = entrenar_pipeline(df)
+        guardar_modelo(pipeline_entrenado)
+        logger.info("=== PIPELINE FINALIZADO CON ÉXITO ===")
+    except Exception as e:
+        logger.critical(f"EL PIPELINE FALLÓ: {e}")
+        raise
+
 if __name__ == "__main__":
-    entrenar_modelo()
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s')
+    ejecutar_entrenamiento()

@@ -48,6 +48,7 @@ def aplicar_limpieza_base(df):
     logging.info(" -> [OK] Tratamiento de outliers y reglas de negocio aplicadas.")
 
     return df
+
 def aplicar_feature_eng(df):
     logging.info("-" * 50)
     logging.info("FASE 2: FEATURE ENGINEERING Y ÉTICA")

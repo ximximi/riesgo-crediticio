@@ -1,6 +1,7 @@
 # Ignorar el archivo CSV pesado
 data/*.csv
-
+# Ignorar los modelos pkl pesados
+models/*.pkl
 # Ignorar contraseñas y variables de entorno
 .env
 

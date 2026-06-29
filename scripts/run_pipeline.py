@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 import logging
@@ -71,7 +72,11 @@ def ejecutar_pipeline():
         inyectar_tablas_limpias(df_final, motor)
 
         # 7. Exportación para ML
-        ruta_csv_limpio = 'data/datos_limpios.csv'
+        BASE_DIR = Path(__file__).resolve().parent.parent 
+        ruta_csv_limpio = BASE_DIR / 'data' / 'datos_limpios.csv'
+        
+        # Nos aseguramos de que la carpeta existe
+        ruta_csv_limpio.parent.mkdir(parents=True, exist_ok=True)
         df_final.to_csv(ruta_csv_limpio, index=False)
         logging.info(f" -> [OK] Dataset limpio exportado a {ruta_csv_limpio}")
         
