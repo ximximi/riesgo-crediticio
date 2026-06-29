@@ -104,7 +104,7 @@ Carga el CSV de entrada y aplica un **saneamiento mínimo** antes de insertar en
 - Normaliza `previous_loan_defaults_on_file` a los únicos valores aceptados por la BD: `'Yes'` o `'No'`
 - Inserta los datos en las tablas crudas `cliente` y `prestamo`
 
-> Este saneamiento previo es clave. Sin él, el `CHECK constraint` de PostgreSQL rechaza el INSERT y las tablas quedan vacías. Ver `docs/fix_csv_nuevo_explicacion.txt`.
+> Este saneamiento previo es clave. Sin él, el `CHECK constraint` de PostgreSQL rechaza el INSERT y las tablas quedan vacías. 
 
 ### Paso 2 — Auditoría de calidad (`scripts/limpieza/quality.py`)
 
@@ -136,9 +136,9 @@ Prepara los datos limpios para el modelo:
 - Split estratificado 80/20 (semilla fija `random_state=42`)
 - `StandardScaler` para variables numéricas
 - `OneHotEncoder` (drop first) para variables categóricas
-- Exporta `X_train.csv`, `X_test.csv`, `y_train.csv`, `y_test.csv`
+- Exporta `X_test_crudo.csv` y `y_test.csv`
 
-### Paso 5 — Entrenamiento y Evaluación (`scripts/training/`)
+### Paso 5 — Entrenamiento y Evaluación (`scripts/training/train.py` y `scripts/training/test.py`)
 
 Entrena el clasificador Random Forest sobre los datasets preprocesados y evalúa su desempeño:
 - `entrenamiento.py` — lee `X_train`/`y_train`, ajusta el modelo y serializa el resultado en `models/modelo_random_forest.pkl`
@@ -189,10 +189,9 @@ Desde la raíz del proyecto, en orden:
 
 ```bash
 python -m scripts.ingesta.ingesta          # Paso 1: Carga CSV → PostgreSQL
-python -m scripts.limpieza.pipeline        # Pasos 2 y 3: Limpieza + Feature Engineering
-python -m scripts.training.train           # Paso 4: Transformación y split para ML
-python -m scripts.training.entrenamiento   # Paso 5a: Entrenamiento del Random Forest
-python -m scripts.training.evaluacion      # Paso 5b: Evaluación y generación de gráficas
+python -m scripts.limpieza.pipeline        # Pasos 2: Limpieza + Feature Engineering
+python -m scripts.training.train           # Paso 3: Entrenamiento del modelo
+python -m scripts.training.test            # Paso 4: Evaluación y generación de gráficas
 ```
 
 ---
