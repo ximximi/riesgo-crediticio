@@ -71,7 +71,7 @@ def ejecutar_pipeline():
         inyectar_tablas_limpias(df_final, motor)
 
         # 7. Exportación para ML
-        ruta_csv_limpio = '../data/datos_limpios.csv'
+        ruta_csv_limpio = 'data/datos_limpios.csv'
         df_final.to_csv(ruta_csv_limpio, index=False)
         logging.info(f" -> [OK] Dataset limpio exportado a {ruta_csv_limpio}")
         
