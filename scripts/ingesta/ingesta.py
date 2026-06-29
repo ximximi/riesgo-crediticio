@@ -9,14 +9,12 @@ import logging
 
 from scripts.common.database import get_db_engine
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-load_dotenv('../.env')
 
 def descargar_datos():
     # Ruta donde se guardará el archivo
     ruta_destino = 'data/riesgo_crediticio.csv'
 
-    #Nuevo --> Aqui se crea automaticamente la carpeta data si no existe
+    #Aqui se crea automaticamente la carpeta data si no existe
     os.makedirs(os.path.dirname(ruta_destino), exist_ok=True)
     
     file_id = '1zKA5NZ8kvpI65DAsIS5n3yZCsKCemiCm' 
@@ -29,9 +27,6 @@ def descargar_datos():
         # Descarga usando gdown
         gdown.download(url, ruta_destino, quiet=False)
         logging.info("¡Descarga completada con éxito!")
-
-if __name__ == "__main__":
-    descargar_datos()
 
 def cargar_base_datos():
     ruta_csv = 'data/riesgo_crediticio.csv'
@@ -78,4 +73,7 @@ def cargar_base_datos():
         logging.error(f"Error durante la carga de datos: {e}")
 
 if __name__ == "__main__":
+    descargar_datos()
     cargar_base_datos()
+
+
