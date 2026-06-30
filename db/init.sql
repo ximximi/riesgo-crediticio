@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS prestamo_limpio (
 );
 
 -- ============================================================
+-- FASE 3: MÉTRICAS DEL MODELO (Para dashboards dinámicos)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS metricas_modelo (
+    id SERIAL PRIMARY KEY,
+    version VARCHAR(50) NOT NULL,
+    accuracy NUMERIC(5,2) NOT NULL,
+    precision NUMERIC(5,2) NOT NULL,
+    recall NUMERIC(5,2) NOT NULL,
+    f1_score NUMERIC(5,2) NOT NULL,
+    roc_auc NUMERIC(5,2) NOT NULL,
+    fecha_entrenamiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
 -- BASE DE DATOS INTERNA DE METABASE
 -- Metabase necesita su propia base de datos para guardar
 -- la configuración del dashboard, usuarios, preguntas y métricas.

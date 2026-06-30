@@ -46,6 +46,8 @@ services:
       # Montamos los scripts y datos para edición en tiempo real
       - ./scripts:/app/scripts
       - ./data:/app/data
+      - ./results:/app/results
+      - ./models:/app/models
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432

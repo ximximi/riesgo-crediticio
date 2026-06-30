@@ -22,20 +22,20 @@ logger = logging.getLogger(__name__)
 
 # Rutas absolutas estables
 BASE_DIR = os.path.dirname(DIRECTORIO_SCRIPTS)
-RUTA_CSV = os.path.join(BASE_DIR, 'data', 'riesgo_crediticio.csv')
 
-def descargar_datos():
+def descargar_datos(version='101k'):
     """Descarga el dataset desde Google Drive."""
-    os.makedirs(os.path.dirname(RUTA_CSV), exist_ok=True)
+    file_id = '1eJXQ-rmIxi3zU2YGdyzl3SPUmSWrSiVa' if version == '45k' else '1jkSd9rdI8P5uL70wzas5iXTexbi0nFCI'
+    ruta_csv = os.path.join(BASE_DIR, 'data', f'riesgo_crediticio_{version}.csv')
     
-    file_id = '1jkSd9rdI8P5uL70wzas5iXTexbi0nFCI' 
+    os.makedirs(os.path.dirname(ruta_csv), exist_ok=True)
     url = f'https://drive.google.com/uc?id={file_id}'
 
-    if os.path.exists(RUTA_CSV):
-        logger.info(f"El archivo ya existe en {RUTA_CSV}. Se omite la descarga.")
+    if os.path.exists(ruta_csv):
+        logger.info(f"El archivo ya existe en {ruta_csv}. Se omite la descarga.")
     else:
-        logger.info("Iniciando descarga del archivo CSV desde Google Drive...")
-        gdown.download(url, RUTA_CSV, quiet=False)
+        logger.info(f"Iniciando descarga del archivo CSV ({version}) desde Google Drive...")
+        gdown.download(url, ruta_csv, quiet=False)
         logger.info("¡Descarga completada con éxito!")
 
 def _sanear_datos(df: pd.DataFrame) -> pd.DataFrame:
@@ -146,13 +146,15 @@ def _sanear_datos(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("  -> [OK] Saneamiento pre-INSERT completado.")
     return df
 
-def cargar_base_datos():
+def cargar_base_datos(version='101k'):
     """Lee el CSV, lo sanea y lo inyecta a PostgreSQL."""
-    if not os.path.exists(RUTA_CSV):
-        raise FileNotFoundError(f"Archivo no encontrado: {RUTA_CSV}")
+    ruta_csv = os.path.join(BASE_DIR, 'data', f'riesgo_crediticio_{version}.csv')
+    
+    if not os.path.exists(ruta_csv):
+        raise FileNotFoundError(f"Archivo no encontrado: {ruta_csv}")
 
-    logger.info(f"Cargando archivo CSV desde {RUTA_CSV}...")
-    df = pd.read_csv(RUTA_CSV, low_memory=False)
+    logger.info(f"Cargando archivo CSV ({version}) desde {ruta_csv}...")
+    df = pd.read_csv(ruta_csv, low_memory=False)
     df.columns = df.columns.str.lower()
     
     # Aplicamos el saneamiento de tu compañero
@@ -180,5 +182,13 @@ def cargar_base_datos():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    descargar_datos()
-    cargar_base_datos()
+    
+    # Capturar la versión desde los argumentos de la consola (si existe)
+    version_arg = sys.argv[1] if len(sys.argv) > 1 else '101k'
+    
+    if version_arg not in ['101k', '45k']:
+        logger.error("Versión no válida. Usa '101k' o '45k'.")
+        sys.exit(1)
+        
+    descargar_datos(version_arg)
+    cargar_base_datos(version_arg)

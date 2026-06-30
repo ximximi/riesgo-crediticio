@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import logging
 import joblib
@@ -11,27 +12,58 @@ from sklearn.metrics import (
     f1_score, confusion_matrix, roc_curve, auc
 )
 
+import sys
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SCRIPTS_DIR = os.path.join(BASE_DIR, 'scripts')
+sys.path.append(SCRIPTS_DIR)
+
+from common.database import get_db_engine
+from sqlalchemy import text
+
 matplotlib.use('Agg')
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Eliminamos las variables globales fijas porque ahora dependerán de la versión
 
-# CAMBIO 1: Apuntamos al modelo Pipeline y al CSV crudo
-RUTA_MODELO  = os.path.join(BASE_DIR, 'models', 'pipeline_random_forest.pkl')
-RUTA_X_TEST  = os.path.join(BASE_DIR, 'data', 'X_test_crudo.csv')
-RUTA_Y_TEST  = os.path.join(BASE_DIR, 'data', 'y_test.csv')
-RUTA_RESULTS = os.path.join(BASE_DIR, 'results')
+def inyectar_metricas_db(metricas: dict, version: str):
+    """
+    Inyecta las métricas calculadas en la base de datos PostgreSQL
+    para que Metabase las lea dinámicamente.
+    """
+    try:
+        motor = get_db_engine()
+        query = text("""
+            INSERT INTO metricas_modelo (version, accuracy, precision, recall, f1_score, roc_auc)
+            VALUES (:version, :acc, :prec, :rec, :f1, :roc)
+        """)
+        
+        with motor.begin() as conn:
+            conn.execute(query, {
+                "version": version,
+                "acc": metricas["accuracy"] * 100,
+                "prec": metricas["precision"] * 100,
+                "rec": metricas["recall"] * 100,
+                "f1": metricas["f1_score"] * 100,
+                "roc": metricas["roc_auc"] * 100
+            })
+        logger.info(" -> [OK] Métricas inyectadas correctamente en PostgreSQL (metricas_modelo).")
+    except Exception as e:
+        logger.error(f" -> [ERROR] No se pudieron inyectar las métricas a PostgreSQL: {e}")
 
-def evaluar_modelo() -> dict:
+def evaluar_modelo(version='101k') -> dict:
     """
-    Carga el modelo entrenado, genera predicciones y exporta métricas + gráficas.
-    Crea la carpeta /results automáticamente si no existe.
-    Retorna el diccionario de métricas.
+    Carga el modelo entrenado de la versión especificada, genera predicciones y exporta métricas.
     """
-    logger.info("--- INICIANDO EVALUACIÓN Y GENERACIÓN DE GRÁFICAS ---")
+    RUTA_MODELO  = os.path.join(BASE_DIR, 'models', f'pipeline_random_forest_{version}.pkl')
+    RUTA_X_TEST  = os.path.join(BASE_DIR, 'data', f'X_test_crudo_{version}.csv')
+    RUTA_Y_TEST  = os.path.join(BASE_DIR, 'data', f'y_test_{version}.csv')
+    RUTA_RESULTS = os.path.join(BASE_DIR, 'results', version)
+
+    logger.info(f"--- INICIANDO EVALUACIÓN Y GENERACIÓN DE GRÁFICAS (VERSIÓN: {version}) ---")
     os.makedirs(RUTA_RESULTS, exist_ok=True)
 
-    # PASO 1: Cargar el modelo serializado y los datos de prueba que el modelo nunca vio
+    # PASO 1: Cargar el modelo serializado y los datos de prueba
     logger.info("1. Cargando modelo entrenado y datos de prueba...")
     pipeline_rf = joblib.load(RUTA_MODELO)
     X_test = pd.read_csv(RUTA_X_TEST)
@@ -135,9 +167,18 @@ def evaluar_modelo() -> dict:
     plt.close()
     logger.info(f"   Gráfica generada → {ruta_dist}")
 
+    # Inyectamos a Base de Datos
+    inyectar_metricas_db(metricas, version)
+
     logger.info("--- EVALUACIÓN FINALIZADA CON ÉXITO ---")
     return metricas
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    evaluar_modelo()
+    
+    version_arg = sys.argv[1] if len(sys.argv) > 1 else '101k'
+    if version_arg not in ['101k', '45k']:
+        logger.error("Versión no válida. Usa '101k' o '45k'.")
+        sys.exit(1)
+        
+    evaluar_modelo(version_arg)

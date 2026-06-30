@@ -159,12 +159,23 @@ SELECT
 
     -- --------------------------------------------------------
     -- MÉTRICAS DEL MODELO DE ML (Random Forest Classifier)
-    -- Estas métricas son estáticas: reflejan los resultados
-    -- obtenidos en la evaluación del modelo entrenado.
+    -- Ahora estas métricas son dinámicas: extraen el último
+    -- resultado insertado en la tabla 'metricas_modelo' por Python.
     -- --------------------------------------------------------
-    97.70                                               AS modelo_accuracy_porcentaje,
-    93.89                                               AS modelo_recall_porcentaje,
-    99.46                                               AS modelo_roc_auc_porcentaje;
+    COALESCE(
+        (SELECT accuracy FROM metricas_modelo ORDER BY fecha_entrenamiento DESC LIMIT 1), 
+        0
+    )                                                   AS modelo_accuracy_porcentaje,
+    
+    COALESCE(
+        (SELECT recall FROM metricas_modelo ORDER BY fecha_entrenamiento DESC LIMIT 1), 
+        0
+    )                                                   AS modelo_recall_porcentaje,
+    
+    COALESCE(
+        (SELECT roc_auc FROM metricas_modelo ORDER BY fecha_entrenamiento DESC LIMIT 1), 
+        0
+    )                                                   AS modelo_roc_auc_porcentaje;
 
 -- Comentario: Al ser una fila única, esta vista es ideal para
 -- las tarjetas de métricas (KPI cards) en el dashboard de Metabase
