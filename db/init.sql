@@ -62,3 +62,21 @@ CREATE TABLE IF NOT EXISTS prestamo_limpio (
         REFERENCES cliente_limpio(id_cliente)
         ON DELETE CASCADE
 );
+
+-- ============================================================
+-- BASE DE DATOS INTERNA DE METABASE
+-- Metabase necesita su propia base de datos para guardar
+-- la configuración del dashboard, usuarios, preguntas y métricas.
+-- Se crea en el mismo servidor PostgreSQL pero completamente
+-- separada de los datos del proyecto (riesgo_db).
+-- ============================================================
+
+-- Crear la base de datos de Metabase solo si no existe
+-- (Usamos DO $$ porque \gexec solo funciona en psql interactivo, no en init scripts de Docker)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'metabase_db') THEN
+        PERFORM dblink_exec('dbname=postgres', 'CREATE DATABASE metabase_db');
+    END IF;
+END
+$$;
