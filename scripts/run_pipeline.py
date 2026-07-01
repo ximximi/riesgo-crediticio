@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
@@ -35,17 +36,17 @@ def inyectar_tablas_limpias(df, engine):
     df_prestamo.to_sql('prestamo_limpio', engine, if_exists='append', index=False)
     logging.info(f" -> [OK] {len(df_prestamo)} registros inyectados en 'prestamo_limpio'.")
 
-def ejecutar_pipeline():
+def ejecutar_pipeline(version='101k'):
     #Orquesta el flujo: Ingesta -> Auditoría -> Limpieza -> Carga
     try:
         logging.info("=" * 60)
-        logging.info("INICIANDO EJECUCIÓN DEL PIPELINE DE DATOS")
+        logging.info(f"INICIANDO EJECUCIÓN DEL PIPELINE DE DATOS (VERSIÓN: {version})")
         logging.info("=" * 60)
 
         # 1. Ingesta
         logging.info("--- Ejecutando módulo de Ingesta ---")
-        descargar_datos()
-        cargar_base_datos()
+        descargar_datos(version)
+        cargar_base_datos(version)
 
         # 2. Extracción para limpieza
         motor = get_db_engine()
@@ -73,7 +74,7 @@ def ejecutar_pipeline():
 
         # 7. Exportación para ML
         BASE_DIR = Path(__file__).resolve().parent.parent 
-        ruta_csv_limpio = BASE_DIR / 'data' / 'datos_limpios.csv'
+        ruta_csv_limpio = BASE_DIR / 'data' / f'datos_limpios_{version}.csv'
         
         # Nos aseguramos de que la carpeta existe
         ruta_csv_limpio.parent.mkdir(parents=True, exist_ok=True)
@@ -88,4 +89,10 @@ def ejecutar_pipeline():
         logging.error(f"Fallo crítico en el pipeline: {e}")
 
 if __name__ == "__main__":
-    ejecutar_pipeline()
+    version_arg = sys.argv[1] if len(sys.argv) > 1 else '101k'
+    
+    if version_arg not in ['101k', '45k']:
+        logging.error("Versión no válida. Usa '101k' o '45k'.")
+        sys.exit(1)
+        
+    ejecutar_pipeline(version_arg)

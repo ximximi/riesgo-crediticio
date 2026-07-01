@@ -62,3 +62,35 @@ CREATE TABLE IF NOT EXISTS prestamo_limpio (
         REFERENCES cliente_limpio(id_cliente)
         ON DELETE CASCADE
 );
+
+-- ============================================================
+-- FASE 3: MÉTRICAS DEL MODELO (Para dashboards dinámicos)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS metricas_modelo (
+    id SERIAL PRIMARY KEY,
+    version VARCHAR(50) NOT NULL,
+    accuracy NUMERIC(5,2) NOT NULL,
+    precision NUMERIC(5,2) NOT NULL,
+    recall NUMERIC(5,2) NOT NULL,
+    f1_score NUMERIC(5,2) NOT NULL,
+    roc_auc NUMERIC(5,2) NOT NULL,
+    fecha_entrenamiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- BASE DE DATOS INTERNA DE METABASE
+-- Metabase necesita su propia base de datos para guardar
+-- la configuración del dashboard, usuarios, preguntas y métricas.
+-- Se crea en el mismo servidor PostgreSQL pero completamente
+-- separada de los datos del proyecto (riesgo_db).
+-- ============================================================
+
+-- Crear la base de datos de Metabase solo si no existe
+-- (Usamos DO $$ porque \gexec solo funciona en psql interactivo, no en init scripts de Docker)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'metabase_db') THEN
+        PERFORM dblink_exec('dbname=postgres', 'CREATE DATABASE metabase_db');
+    END IF;
+END
+$$;

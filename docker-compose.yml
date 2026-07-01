@@ -1,4 +1,16 @@
+# ============================================================
+# docker-compose.yml — Proyecto Riesgo Crediticio
+# Servicios: PostgreSQL, Pipeline Python, Metabase Dashboard
+# ============================================================
+
 services:
+
+  # ----------------------------------------------------------
+  # SERVICIO 1: Base de datos PostgreSQL
+  # Almacena los datos crudos y procesados del proyecto.
+  # El script init.sql crea las tablas y vistas automáticamente
+  # la primera vez que el contenedor se inicializa.
+  # ----------------------------------------------------------
   postgres:
     image: postgres:15
     container_name: db_riesgo_crediticio
@@ -7,11 +19,22 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
       POSTGRES_DB: ${POSTGRES_DB:-riesgo_db}
     ports:
+      # Puerto expuesto al host para conexiones externas (ej: DBeaver)
       - "5432:5432"
     volumes:
+      # Volumen persistente: los datos sobreviven reinicios del contenedor
       - postgres_data:/var/lib/postgresql/data
+      # Script SQL que se ejecuta automáticamente al crear la base de datos
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
+
+  # ----------------------------------------------------------
+  # SERVICIO 2: Pipeline de Python
+  # Ejecuta los scripts de limpieza, feature engineering y
+  # entrenamiento del modelo Random Forest.
+  # El comando "tail -f /dev/null" mantiene el contenedor vivo
+  # para que podamos ejecutar scripts manualmente con docker exec.
+  # ----------------------------------------------------------
   pipeline_python:
     build:
       context: .
@@ -20,8 +43,11 @@ services:
     depends_on:
       - postgres
     volumes:
-      - ./scripts:/app/scripts 
-      - ./data:/app/data       
+      # Montamos los scripts y datos para edición en tiempo real
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./models:/app/models
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -30,5 +56,54 @@ services:
       - DB_NAME=${POSTGRES_DB:-riesgo_db}
     command: tail -f /dev/null
 
+  # ----------------------------------------------------------
+  # SERVICIO 3: Metabase — Dashboard de visualización
+  # Proporciona una interfaz web en localhost:3000 para crear
+  # dashboards interactivos con los datos de riesgo crediticio.
+  # Guarda su propia configuración en "metabase_db" dentro del
+  # mismo PostgreSQL (NO en la base de datos principal).
+  # ----------------------------------------------------------
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase_dashboard
+    depends_on:
+      # Metabase necesita que PostgreSQL esté corriendo primero
+      - postgres
+    ports:
+      # Acceso al dashboard: http://localhost:3000
+      - "3000:3000"
+    environment:
+      # --- Configuración de la base de datos INTERNA de Metabase ---
+      # Metabase guarda sus propios datos (usuarios, dashboards, preguntas)
+      # en una base de datos separada para no mezclar con los datos del proyecto
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_db
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER:-admin}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:-admin123}
+      # IMPORTANTE: dentro de la red Docker, el host es el nombre del servicio
+      MB_DB_HOST: postgres
+
+      # --- Zona horaria del dashboard ---
+      JAVA_TIMEZONE: America/Santiago
+
+      # --- Opcional: desactivar telemetría anónima ---
+      MB_SEND_EMAIL_ON_FIRST_LOGIN: "false"
+      MB_ANON_TRACKING_ENABLED: "false"
+
+    volumes:
+      # Volumen para archivos temporales y plugins de Metabase
+      - metabase_data:/metabase-data
+
+    restart: unless-stopped
+
+# ============================================================
+# VOLÚMENES PERSISTENTES
+# Estos volúmenes garantizan que los datos no se pierdan
+# aunque se reinicien o recreen los contenedores.
+# ============================================================
 volumes:
+  # Datos de PostgreSQL (tablas cliente, prestamo, etc.)
   postgres_data:
+  # Configuración interna de Metabase (dashboards, usuarios, preguntas)
+  metabase_data:

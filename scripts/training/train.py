@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 # Rutas absolutas
 BASE_DIR = os.path.dirname(DIRECTORIO_SCRIPTS)
 RUTA_MODELS = os.path.join(BASE_DIR, 'models')
-RUTA_MODELO_FINAL = os.path.join(RUTA_MODELS, 'pipeline_random_forest.pkl')
 
 QUERY_DATOS_LIMPIOS = """
     SELECT c.*, p.loan_amnt, p.loan_intent, p.loan_int_rate, p.loan_percent_income, p.loan_status
@@ -70,7 +69,7 @@ def seleccion_de_variables(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def entrenar_pipeline(df: pd.DataFrame):
+def entrenar_pipeline(df: pd.DataFrame, version: str):
     """3. Construye el Pipeline (Transformador + Clasificador) y lo entrena."""
     logger.info("3. Configurando Pipeline y dividiendo datos...")
 
@@ -81,8 +80,8 @@ def entrenar_pipeline(df: pd.DataFrame):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, random_state=42, stratify=y
     )
-    X_test.to_csv(os.path.join(BASE_DIR, 'data', 'X_test_crudo.csv'), index=False)
-    y_test.to_csv(os.path.join(BASE_DIR, 'data', 'y_test.csv'), index=False)
+    # Extraemos la version de algún lado, la pasaremos como argumento a entrenar_pipeline
+    pass
 
     logger.info(f" -> Datos divididos: Train ({X_train.shape[0]:,} filas), Test ({X_test.shape[0]:,} filas)")
 
@@ -115,21 +114,30 @@ def entrenar_pipeline(df: pd.DataFrame):
 
     return pipeline
 
-def guardar_modelo(pipeline):
+def guardar_modelo(pipeline, version: str):
     """4. Serializa el pipeline completo en el disco."""
     logger.info("5. Exportando el modelo entrenado...")
     os.makedirs(RUTA_MODELS, exist_ok=True)
-    joblib.dump(pipeline, RUTA_MODELO_FINAL)
-    logger.info(f"¡Modelo guardado exitosamente en {RUTA_MODELO_FINAL}!")
+    ruta_modelo = os.path.join(RUTA_MODELS, f'pipeline_random_forest_{version}.pkl')
+    joblib.dump(pipeline, ruta_modelo)
+    logger.info(f"¡Modelo guardado exitosamente en {ruta_modelo}!")
 
-def ejecutar_entrenamiento() -> None:
+def ejecutar_entrenamiento(version='101k') -> None:
     """Punto de entrada principal del módulo de entrenamiento."""
-    logger.info("=== INICIANDO ENTRENAMIENTO MLOps ===")
+    logger.info(f"=== INICIANDO ENTRENAMIENTO MLOps (VERSIÓN: {version}) ===")
     try:
         df = extraer_datos_limpios()
         df = seleccion_de_variables(df)
-        pipeline_entrenado = entrenar_pipeline(df)
-        guardar_modelo(pipeline_entrenado)
+        
+        # Guardar splits para test usando la versión
+        X = df.drop(columns=[TARGET])
+        y = df[TARGET]
+        _, X_test, _, y_test = train_test_split(X, y, test_size=0.20, random_state=42, stratify=y)
+        X_test.to_csv(os.path.join(BASE_DIR, 'data', f'X_test_crudo_{version}.csv'), index=False)
+        y_test.to_csv(os.path.join(BASE_DIR, 'data', f'y_test_{version}.csv'), index=False)
+        
+        pipeline_entrenado = entrenar_pipeline(df, version)
+        guardar_modelo(pipeline_entrenado, version)
         logger.info("=== PIPELINE FINALIZADO CON ÉXITO ===")
     except Exception as e:
         logger.critical(f"EL PIPELINE FALLÓ: {e}")
@@ -137,4 +145,10 @@ def ejecutar_entrenamiento() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s')
-    ejecutar_entrenamiento()
+    
+    version_arg = sys.argv[1] if len(sys.argv) > 1 else '101k'
+    if version_arg not in ['101k', '45k']:
+        logger.error("Versión no válida. Usa '101k' o '45k'.")
+        sys.exit(1)
+        
+    ejecutar_entrenamiento(version_arg)
