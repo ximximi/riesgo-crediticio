@@ -144,7 +144,7 @@ def ejecutar_entrenamiento(version='101k') -> None:
         raise
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(funcName)s] - %(message)s', force=True)
     
     version_arg = sys.argv[1] if len(sys.argv) > 1 else '101k'
     if version_arg not in ['101k', '45k']:
