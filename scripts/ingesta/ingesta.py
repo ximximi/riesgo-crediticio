@@ -176,8 +176,8 @@ def cargar_base_datos(version='101k'):
     df_prestamo = df[[col for col in cols_prestamo if col in df.columns]]
 
     logger.info("Inyectando datos a PostgreSQL (Tablas Crudas)...")
-    df_cliente.to_sql('cliente', engine, if_exists='append', index=False)
-    df_prestamo.to_sql('prestamo', engine, if_exists='append', index=False)
+    df_cliente.to_sql('cliente', engine, if_exists='append', index=False, chunksize=5000)
+    df_prestamo.to_sql('prestamo', engine, if_exists='append', index=False, chunksize=5000)
     logger.info(f"¡Carga cruda completada! {len(df_cliente):,} clientes y {len(df_prestamo):,} préstamos.")
 
 if __name__ == "__main__":

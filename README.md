@@ -27,6 +27,7 @@ El objetivo práctico es ayudar a las instituciones financieras a optimizar la m
 | **GitHub Actions** | CI/CD: construye y despliega la imagen automáticamente al hacer push a `main` |
 | **Render (PaaS)** | Plataforma cloud donde se despliega el contenedor en producción |
 | **VS Code** | IDE principal, con asistencia de IA para el diseño de la arquitectura |
+| Metabase | Herramienta de Business Intelligence (BI) para la visualización interactiva del Dashboard |
 
 ---
 
@@ -178,23 +179,31 @@ DB_PASSWORD=tu_contraseña
 ### 3. Levantar los servicios
 
 ```bash
-docker-compose up
+docker-compose up -d --build
 ```
 
 Esto inicializa PostgreSQL con el schema definido en `db/init.sql` y levanta el entorno de la aplicación.
 
 ### 4. Ejecutar el pipeline completo
 
-Desde la raíz del proyecto, en orden:
+**Importante:** Todos los scripts deben ejecutarse DENTRO del contenedor de Docker (`entorno_scripts`) para garantizar que las variables de entorno y las dependencias funcionen correctamente. 
+
+Utilizamos el parámetro `45k` para ejecutar una versión optimizada del dataset y evitar desbordamientos de memoria (OOM) en entornos locales.
+
+Desde la raíz del proyecto, ejecuta en orden:
 
 ```bash
-python -m scripts.ingesta.ingesta          # Paso 1: Carga CSV → PostgreSQL
-python -m scripts.limpieza.pipeline        # Pasos 2: Limpieza + Feature Engineering
-python -m scripts.training.train           # Paso 3: Entrenamiento del modelo
-python -m scripts.training.test            # Paso 4: Evaluación y generación de gráficas
-```
+# Paso 1: Orquestador (Ejecuta Ingesta cruda + Limpieza + Feature Engineering)
+docker exec -it entorno_scripts python scripts/run_pipeline.py 45k
 
+# Paso 2: Entrenamiento del modelo Random Forest (Genera el archivo .pkl)
+docker exec -it entorno_scripts python scripts/training/train.py 45k
+
+# Paso 3: Evaluación y generación de gráficas (Inyecta métricas a la BD)
+docker exec -it entorno_scripts python scripts/training/test.py 45k
+```
 ---
+
 
 ## Arquitectura de la base de datos
 

@@ -1,4 +1,10 @@
 
+-- PREREQUISITO: Base de datos interna de Metabase
+-- Se crea aquí para garantizar su existencia desde el primer arranque.
+-- Sin esta BD, el contenedor de Metabase falla al intentar conectarse.
+SELECT 'CREATE DATABASE metabase_db OWNER ' || current_user
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'metabase_db')\gexec
+
 -- FASE 1: TABLAS CRUDAS (Datos originales con restricciones)
 CREATE TABLE IF NOT EXISTS cliente (
     id_cliente SERIAL PRIMARY KEY,
