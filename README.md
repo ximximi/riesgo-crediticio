@@ -175,20 +175,26 @@ DB_NAME=riesgo_crediticio
 DB_USER=tu_usuario
 DB_PASSWORD=tu_contraseña
 ```
+Aquí tienes la versión actualizada y maquetada directamente en formato Markdown para que solo tengas que copiar y pegarla en el archivo `README.md`.
+
+Se mantiene la estructura que ya tenían, respetando el uso del parámetro `45k` para el entorno local, y se integran de forma nativa los pasos de restauración de Metabase con la advertencia de credenciales.
+
+---
 
 ### 3. Levantar los servicios
 
 ```bash
 docker-compose up -d --build
+
 ```
 
-Esto inicializa PostgreSQL con el schema definido en `db/init.sql` y levanta el entorno de la aplicación.
+Esto inicializa PostgreSQL con el schema definido en `db/init.sql` y levanta el entorno de la aplicación. **Nota:** Se recomienda esperar aproximadamente 60 segundos o verificar con `docker ps` que el contenedor de PostgreSQL marque el estado `(healthy)` antes de continuar.
 
 ### 4. Ejecutar el pipeline completo
 
-**Importante:** Todos los scripts deben ejecutarse DENTRO del contenedor de Docker (`entorno_scripts`) para garantizar que las variables de entorno y las dependencias funcionen correctamente. 
+**Importante:** Todos los scripts deben ejecutarse DENTRO del contenedor de Docker (`entorno_scripts`) para garantizar que las variables de entorno y las dependencias funcionen correctamente.
 
-Utilizamos el parámetro `45k` para ejecutar una versión optimizada del dataset y evitar desbordamientos de memoria (OOM) en entornos locales.
+Utilizamos el parámetro `45k` para ejecutar una versión optimizada del dataset y evitar desbordamientos de memoria (OOM) en entornos locales (se puede reemplazar por `101k` si el equipo tiene los recursos necesarios).
 
 Desde la raíz del proyecto, ejecuta en orden:
 
@@ -201,9 +207,46 @@ docker exec -it entorno_scripts python scripts/training/train.py 45k
 
 # Paso 3: Evaluación y generación de gráficas (Inyecta métricas a la BD)
 docker exec -it entorno_scripts python scripts/training/test.py 45k
-```
----
 
+```
+
+### 5. Restaurar Dashboards e Integración BI (Metabase)
+
+Para garantizar que los dashboards y reportes configurados previamente estén disponibles en cualquier entorno local sin necesidad de recrearlos manualmente, restauraremos la base de datos interna de Metabase utilizando el archivo de respaldo versionado.
+
+Dependiendo de la terminal que estés utilizando, ejecuta **uno** de los siguientes comandos:
+
+**Opción A (Símbolo del sistema / CMD):**
+
+```cmd
+docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db < db\metabase_backup.sql
+
+```
+
+**Opción B (PowerShell):**
+
+```powershell
+Get-Content db\metabase_backup.sql | docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db
+
+```
+
+Una vez inyectado el archivo `.sql`, es obligatorio reiniciar el contenedor para que la máquina virtual de Java vuelva a cargar los dashboards en memoria:
+
+```bash
+docker restart metabase_dashboard
+
+```
+
+### 6. Acceso al Dashboard
+
+Espera entre 30 y 40 segundos después del reinicio para asegurar que el servicio esté completamente arriba, y luego abre tu navegador web en:
+
+**http://localhost:3030**
+
+> **IMPORTANTE - CREDENCIALES DE ACCESO:**
+> Al ejecutar el comando de restauración, la configuración local de usuarios se sobreescribe. Para iniciar sesión, es necesario utilizar **exclusivamente el correo y la contraseña** del integrante del equipo que generó el archivo `metabase_backup.sql` original.
+
+---
 
 ## Arquitectura de la base de datos
 
