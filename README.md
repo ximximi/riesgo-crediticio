@@ -189,7 +189,18 @@ docker-compose up -d --build
 
 Esto inicializa PostgreSQL con el schema definido en `db/init.sql` y levanta el entorno de la aplicación. **Nota:** Se recomienda esperar aproximadamente 60 segundos o verificar con `docker ps` que el contenedor de PostgreSQL marque el estado `(healthy)` antes de continuar.
 
-### 4. Ejecutar el pipeline completo
+### 4. Crear las vistas del dashboard
+
+> **⚠️ Paso obligatorio.** Las vistas que alimentan los gráficos de Metabase deben crearse antes de restaurar el backup del dashboard. Si se omite este paso, todos los gráficos aparecerán con error aunque la base de datos tenga datos.
+
+```bash
+docker cp db/vistas_dashboard.sql db_riesgo_crediticio:/tmp/vistas_dashboard.sql
+docker exec db_riesgo_crediticio psql -U admin -d riesgo_db -f /tmp/vistas_dashboard.sql
+```
+
+Deberías ver `CREATE VIEW` repetido 4 veces como confirmación.
+
+### 5. Ejecutar el pipeline completo
 
 **Importante:** Todos los scripts deben ejecutarse DENTRO del contenedor de Docker (`entorno_scripts`) para garantizar que las variables de entorno y las dependencias funcionen correctamente.
 
@@ -209,7 +220,7 @@ docker exec -it entorno_scripts python scripts/training/test.py 45k
 
 ```
 
-### 5. Restaurar Dashboards e Integración BI (Metabase)
+### 6. Restaurar Dashboards e Integración BI (Metabase)
 
 Para garantizar que los dashboards y reportes configurados previamente estén disponibles en cualquier entorno local sin necesidad de recrearlos manualmente, restauraremos la base de datos interna de Metabase utilizando el archivo de respaldo versionado.
 
@@ -246,7 +257,7 @@ Sigue estos pasos en orden para limpiar e importar el respaldo correctamente:
    docker-compose start metabase
    ```
 
-### 6. Acceso al Dashboard
+### 7. Acceso al Dashboard
 
 Espera entre 30 y 40 segundos después del reinicio para asegurar que el servicio esté completamente arriba, y luego abre tu navegador web en:
 
