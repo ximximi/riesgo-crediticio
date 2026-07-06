@@ -166,20 +166,19 @@ cd riesgo-crediticio
 
 ### 2. Configurar las variables de entorno
 
-Crear el archivo `.env` en la raíz con las credenciales de la base de datos:
+Crear el archivo `.env` en la raíz con las credenciales reales del proyecto:
 
 ```env
-DB_HOST=localhost
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=admin123
+POSTGRES_DB=riesgo_db
+
+DB_USER=admin
+DB_PASSWORD=admin123
+DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=riesgo_crediticio
-DB_USER=tu_usuario
-DB_PASSWORD=tu_contraseña
+DB_NAME=riesgo_db
 ```
-Aquí tienes la versión actualizada y maquetada directamente en formato Markdown para que solo tengas que copiar y pegarla en el archivo `README.md`.
-
-Se mantiene la estructura que ya tenían, respetando el uso del parámetro `45k` para el entorno local, y se integran de forma nativa los pasos de restauración de Metabase con la advertencia de credenciales.
-
----
 
 ### 3. Levantar los servicios
 
@@ -214,28 +213,38 @@ docker exec -it entorno_scripts python scripts/training/test.py 45k
 
 Para garantizar que los dashboards y reportes configurados previamente estén disponibles en cualquier entorno local sin necesidad de recrearlos manualmente, restauraremos la base de datos interna de Metabase utilizando el archivo de respaldo versionado.
 
-Dependiendo de la terminal que estés utilizando, ejecuta **uno** de los siguientes comandos:
+Sigue estos pasos en orden para limpiar e importar el respaldo correctamente:
 
-**Opción A (Símbolo del sistema / CMD):**
+1. **Detener temporalmente el contenedor de Metabase** para evitar bloqueos de escritura en la base de datos:
+   ```bash
+   docker-compose stop metabase
+   ```
 
-```cmd
-docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db < db\metabase_backup.sql
+2. **Eliminar la base de datos vacía** que Metabase crea automáticamente al arrancar:
+   ```bash
+   docker exec db_riesgo_crediticio psql -U admin -d postgres -c "DROP DATABASE IF EXISTS metabase_db WITH (FORCE);"
+   ```
 
-```
+3. **Crear la base de datos limpia** lista para recibir el respaldo:
+   ```bash
+   docker exec db_riesgo_crediticio psql -U admin -d postgres -c "CREATE DATABASE metabase_db;"
+   ```
 
-**Opción B (PowerShell):**
+4. **Restaurar el archivo de respaldo** `db/metabase_backup.sql` (que ya está configurado en UTF-8):
 
-```powershell
-Get-Content db\metabase_backup.sql | docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db
+   * **Si usas PowerShell:**
+     ```powershell
+     Get-Content db\metabase_backup.sql | docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db
+     ```
+   * **Si usas Símbolo del sistema (CMD):**
+     ```cmd
+     docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db < db\metabase_backup.sql
+     ```
 
-```
-
-Una vez inyectado el archivo `.sql`, es obligatorio reiniciar el contenedor para que la máquina virtual de Java vuelva a cargar los dashboards en memoria:
-
-```bash
-docker restart metabase_dashboard
-
-```
+5. **Iniciar el contenedor de Metabase** nuevamente para que levante los dashboards restaurados:
+   ```bash
+   docker-compose start metabase
+   ```
 
 ### 6. Acceso al Dashboard
 
