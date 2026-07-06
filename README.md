@@ -1,8 +1,8 @@
 # Predicción de Riesgo Crediticio — Loan Default
 
-**Integrantes:** Felipe Rubio, Martina López, Ximena Soliz, Yassmin Bazán — Grupo N°8  
-**Asignatura:** Gestión de datos para IA 001D  
-**Docente:** Jazna Meza Hidalgo  
+**Integrantes:** Felipe Rubio, Martina López, Ximena Soliz, Yassmin Bazán — Grupo N°8
+**Asignatura:** Gestión de datos para IA 001D
+**Docente:** Jazna Meza Hidalgo
 **Fecha:** Abril-Julio 2026
 
 ---
@@ -17,17 +17,17 @@ El objetivo práctico es ayudar a las instituciones financieras a optimizar la m
 
 ## Stack tecnológico
 
-| Herramienta | Rol en el proyecto |
-|---|---|
-| **Python** | Ingesta, limpieza, feature engineering y entrenamiento del modelo |
-| **PostgreSQL** | Data Warehouse: almacena los datos crudos y los datos limpios en tablas separadas |
-| **Docker** | Contenerización completa para garantizar reproducibilidad en cualquier entorno |
-| **Docker Compose** | Orquesta los servicios de la aplicación y la base de datos juntos |
-| **Git & GitHub** | Control de versiones y colaboración del equipo |
-| **GitHub Actions** | CI/CD: construye y despliega la imagen automáticamente al hacer push a `main` |
-| **Render (PaaS)** | Plataforma cloud donde se despliega el contenedor en producción |
-| **VS Code** | IDE principal, con asistencia de IA para el diseño de la arquitectura |
-| Metabase | Herramienta de Business Intelligence (BI) para la visualización interactiva del Dashboard |
+| Herramienta              | Rol en el proyecto                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| **Python**         | Ingesta, limpieza, feature engineering y entrenamiento del modelo                          |
+| **PostgreSQL**     | Data Warehouse: almacena los datos crudos y los datos limpios en tablas separadas          |
+| **Docker**         | Contenerización completa para garantizar reproducibilidad en cualquier entorno            |
+| **Docker Compose** | Orquesta los servicios de la aplicación y la base de datos juntos                         |
+| **Git & GitHub**   | Control de versiones y colaboración del equipo                                            |
+| **GitHub Actions** | CI/CD: construye y despliega la imagen automáticamente al hacer push a`main`            |
+| **Render (PaaS)**  | Plataforma cloud donde se despliega el contenedor en producción                           |
+| **VS Code**        | IDE principal, con asistencia de IA para el diseño de la arquitectura                     |
+| **Metabase**            | Herramienta de Business Intelligence (BI) para la visualización interactiva del Dashboard |
 
 ---
 
@@ -100,16 +100,18 @@ El sistema procesa los datos en 5 pasos secuenciales. Cada paso está implementa
 ### Paso 1 — Ingesta (`scripts/ingesta/ingesta.py`)
 
 Carga el CSV de entrada y aplica un **saneamiento mínimo** antes de insertar en PostgreSQL:
+
 - Genera `id_cliente` si el CSV no lo trae (clave para el JOIN entre tablas)
 - Imputa nulos en columnas numéricas con la mediana
 - Normaliza `previous_loan_defaults_on_file` a los únicos valores aceptados por la BD: `'Yes'` o `'No'`
 - Inserta los datos en las tablas crudas `cliente` y `prestamo`
 
-> Este saneamiento previo es clave. Sin él, el `CHECK constraint` de PostgreSQL rechaza el INSERT y las tablas quedan vacías. 
+> Este saneamiento previo es clave. Sin él, el `CHECK constraint` de PostgreSQL rechaza el INSERT y las tablas quedan vacías.
 
 ### Paso 2 — Auditoría de calidad (`scripts/limpieza/quality.py`)
 
 La clase `QualityCheck` actúa como un escáner: **solo detecta problemas, no los modifica**. Genera un reporte con:
+
 - Presencia de nulos
 - Duplicados por `id_cliente`
 - Outliers (método IQR)
@@ -119,6 +121,7 @@ La clase `QualityCheck` actúa como un escáner: **solo detecta problemas, no lo
 ### Paso 3 — Limpieza y Feature Engineering (`scripts/limpieza/limpieza.py` + `pipeline.py`)
 
 Sobre los datos crudos extraídos de la BD, se aplica:
+
 - Eliminación de duplicados
 - Valores negativos → convertidos a absolutos
 - Estandarización de texto (minúsculas, sin espacios extra)
@@ -133,6 +136,7 @@ Los resultados se cargan en `cliente_limpio` y `prestamo_limpio`, y se exportan 
 ### Paso 4 — Transformación para ML (`scripts/training/train.py`)
 
 Prepara los datos limpios para el modelo:
+
 - Feature selection por correlación con el target (umbral 0.05), preservando variables protegidas por lógica de negocio
 - Split estratificado 80/20 (semilla fija `random_state=42`)
 - `StandardScaler` para variables numéricas
@@ -142,6 +146,7 @@ Prepara los datos limpios para el modelo:
 ### Paso 5 — Entrenamiento y Evaluación (`scripts/training/train.py` y `scripts/training/test.py`)
 
 Entrena el clasificador Random Forest sobre los datasets preprocesados y evalúa su desempeño:
+
 - `entrenamiento.py` — lee `X_train`/`y_train`, ajusta el modelo y serializa el resultado en `models/modelo_random_forest.pkl`
 - `evaluacion.py` — carga el `.pkl` y `X_test`/`y_test`, calcula métricas numéricas y genera cuatro gráficas de diagnóstico en `results/`
 
@@ -184,14 +189,13 @@ DB_NAME=riesgo_db
 
 ```bash
 docker-compose up -d --build
-
 ```
 
 Esto inicializa PostgreSQL con el schema definido en `db/init.sql` y levanta el entorno de la aplicación. **Nota:** Se recomienda esperar aproximadamente 60 segundos o verificar con `docker ps` que el contenedor de PostgreSQL marque el estado `(healthy)` antes de continuar.
 
 ### 4. Crear las vistas del dashboard
 
-> **⚠️ Paso obligatorio.** Las vistas que alimentan los gráficos de Metabase deben crearse antes de restaurar el backup del dashboard. Si se omite este paso, todos los gráficos aparecerán con error aunque la base de datos tenga datos.
+>  **Paso obligatorio.** Las vistas que alimentan los gráficos de Metabase deben crearse antes de restaurar el backup del dashboard. Si se omite este paso, todos los gráficos aparecerán con error aunque la base de datos tenga datos.
 
 ```bash
 docker cp db/vistas_dashboard.sql db_riesgo_crediticio:/tmp/vistas_dashboard.sql
@@ -210,14 +214,16 @@ Desde la raíz del proyecto, ejecuta en orden:
 
 ```bash
 # Paso 1: Orquestador (Ejecuta Ingesta cruda + Limpieza + Feature Engineering)
+docker exec -it entorno_scripts python scripts/run_pipeline.py 101k
 docker exec -it entorno_scripts python scripts/run_pipeline.py 45k
 
 # Paso 2: Entrenamiento del modelo Random Forest (Genera el archivo .pkl)
+docker exec -it entorno_scripts python scripts/training/train.py 101k
 docker exec -it entorno_scripts python scripts/training/train.py 45k
 
 # Paso 3: Evaluación y generación de gráficas (Inyecta métricas a la BD)
+docker exec -it entorno_scripts python scripts/training/test.py 101k
 docker exec -it entorno_scripts python scripts/training/test.py 45k
-
 ```
 
 ### 6. Restaurar Dashboards e Integración BI (Metabase)
@@ -227,20 +233,20 @@ Para garantizar que los dashboards y reportes configurados previamente estén di
 Sigue estos pasos en orden para limpiar e importar el respaldo correctamente:
 
 1. **Detener temporalmente el contenedor de Metabase** para evitar bloqueos de escritura en la base de datos:
+
    ```bash
    docker-compose stop metabase
    ```
-
 2. **Eliminar la base de datos vacía** que Metabase crea automáticamente al arrancar:
+
    ```bash
    docker exec db_riesgo_crediticio psql -U admin -d postgres -c "DROP DATABASE IF EXISTS metabase_db WITH (FORCE);"
    ```
-
 3. **Crear la base de datos limpia** lista para recibir el respaldo:
+
    ```bash
    docker exec db_riesgo_crediticio psql -U admin -d postgres -c "CREATE DATABASE metabase_db;"
    ```
-
 4. **Restaurar el archivo de respaldo** `db/metabase_backup.sql` (que ya está configurado en UTF-8):
 
    * **Si usas PowerShell:**
@@ -251,8 +257,8 @@ Sigue estos pasos en orden para limpiar e importar el respaldo correctamente:
      ```cmd
      docker exec -i db_riesgo_crediticio psql -U admin -d metabase_db < db\metabase_backup.sql
      ```
-
 5. **Iniciar el contenedor de Metabase** nuevamente para que levante los dashboards restaurados:
+
    ```bash
    docker-compose start metabase
    ```
@@ -273,10 +279,12 @@ Espera entre 30 y 40 segundos después del reinicio para asegurar que el servici
 PostgreSQL almacena los datos en dos capas separadas:
 
 **Tablas crudas** (datos originales, con mínimo saneamiento):
+
 - `cliente` — datos del solicitante
 - `prestamo` — características del préstamo
 
 **Tablas limpias** (Data Warehouse, listas para el modelo):
+
 - `cliente_limpio` — sin `person_gender`, con variables derivadas
 - `prestamo_limpio` — importes y tasas normalizadas
 
@@ -298,11 +306,11 @@ Incluye el análisis de requerimientos, la arquitectura de datos, el diseño del
 
 ## Estado del proyecto
 
-| Fase | Estado |
-|---|---|
-| Planificación y WBS | ✅ Completado |
-| Diseño arquitectónico y selección de stack | ✅ Completado |
-| Ingesta de datos (CSV → PostgreSQL) | ✅ Completado |
-| Limpieza y feature engineering | ✅ Completado |
-| Entrenamiento y evaluación del modelo | ✅ Completado |
-| Despliegue en Render (CI/CD via GitHub Actions) | ⏳ Pendiente |
+| Fase                                            | Estado        |
+| ----------------------------------------------- | ------------- |
+| Planificación y WBS                            | ✅ Completado |
+| Diseño arquitectónico y selección de stack   | ✅ Completado |
+| Ingesta de datos (CSV → PostgreSQL)            | ✅ Completado |
+| Limpieza y feature engineering                  | ✅ Completado |
+| Entrenamiento y evaluación del modelo          | ✅ Completado |
+| Despliegue en Render (CI/CD via GitHub Actions) | ⏳ Pendiente  |
